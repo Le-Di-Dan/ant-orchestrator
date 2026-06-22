@@ -176,7 +176,7 @@ phụ thuộc bất kỳ capability nào chỉ xuất hiện ở P7.
 
 ### Phase 0 — Project Scaffolding & Quality Tooling
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
 
 #### Mục tiêu
 Dựng skeleton package và **quality gate local tự động** làm guardrail cho mọi phase sau.
@@ -625,3 +625,4 @@ roadmap, chỉ cần PO xác nhận tại thời điểm phù hợp:
 | Phiên bản | Thay đổi | Ghi chú |
 |---|---|---|
 | v1.0 | Khởi tạo Master Roadmap sau khảo sát repository (chưa có source code). 8 phase (0–7), MVP Release Gate 6 chiều, ba tầng tiến hóa. Áp dụng các điều chỉnh review: persistence hai cấp, human approval nền tảng, execution boundary trước worker thật, energy enforcement, context manifest, phân biệt Walking Skeleton/First Real Slice/Full MVP Candidate, tooling Ruff+mypy+pytest, memory MVP tối thiểu deterministic, Phase 3 chia 3A/3B/3C, khóa quyền Documentation Ant, giới hạn vai trò Test Ant, phân biệt Retry/Regroup/Escalate, runtime provider-neutral, Git write ngoài MVP, constants gate hợp lý, cancel/terminal state, evidence dạng artifact có cấu trúc. | Mọi phase `NOT_STARTED`. |
+| v1.1 | Phase 0 chuyển `NOT_STARTED` → `COMPLETED` sau independent closure audit. Evidence: `python -m pip install -e ".[dev]"`, `ant --help`, `ruff check`, `ruff format --check`, `mypy src scripts`, `pytest` (19 passed), `python -m scripts.quality.file_size`, unified gate `python -m scripts.quality.gate` (5/5 PASS) — tất cả exit 0. Chi tiết: `docs/plans/PHASE_0_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 0. | Phase 1–7 giữ `NOT_STARTED`. |
