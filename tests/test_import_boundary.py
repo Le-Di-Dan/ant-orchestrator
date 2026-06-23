@@ -8,7 +8,7 @@ from pathlib import Path
 import ant_orchestrator
 
 PKG_ROOT = Path(ant_orchestrator.__file__).parent
-BANNED_EXTERNAL = {"sqlite3", "yaml", "typer", "langgraph", "litellm"}
+BANNED_EXTERNAL = {"sqlite3", "yaml", "typer", "langgraph", "litellm", "openai"}
 
 
 def _imported_modules(path: Path) -> set[str]:
