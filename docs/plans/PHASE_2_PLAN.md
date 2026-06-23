@@ -34,9 +34,9 @@
 ## 3. Sáu hiệu chỉnh cuối của PO (ghi đè revised plan)
 
 1. **Cloud adapter provider-neutral:** đặt tên `LiteLLMCloudAdapter` (KHÔNG `OpenAiCloudAdapter`). OpenAI chỉ là bootstrap provider chọn qua config/live verification; Anthropic/Gemini sau này dùng cùng adapter. Provider/model không hard-code trong class; type LiteLLM/OpenAI không rò khỏi infrastructure adapter. `OllamaAdapter` vẫn là class riêng (local endpoint/capability/error khác). *Ảnh hưởng từ CP3; CP1 chỉ đảm bảo public contract không chứa assumption OpenAI-specific.*
-2. **Timeout policy:** precedence `request > endpoint/model config > system default`. `timeout <= 0` reject; `> MAX_TIMEOUT_SECONDS` reject; **không clamp**, không âm thầm đổi; không hard-code trong adapter. *CP1 chỉ định nghĩa field; resolution logic ở CP2.*
+2. **Timeout policy (float, thống nhất toàn Phase 2):** mọi timeout là `float` để khớp trực tiếp `LLMRequest.timeout_seconds: float | None` (CP3 dùng output resolver as-is, không convert). Precedence `request > endpoint/model config > system default`. Reject: `bool`, `NaN`, `±inf`, `<= 0`, `> MAX_TIMEOUT_SECONDS`; **không clamp**, không round, không ép về int; không hard-code trong adapter. Config `timeout_seconds: 60` (int) và `60.5` (float) đều normalize thành float. *CP1 định nghĩa field; resolution logic ở CP2.*
 3. **Async bridge:** `LLMAdapter` async. **Không** thêm `asyncio.run` demo vào production composition root (composition chỉ wiring dependency). `asyncio.run` chỉ ở synchronous entry point thật hoặc live/test script. CP6 không tạo dead bridge code (Phase 2 chưa có CLI command gọi model).
-4. **SecretProvider semantics:** `get(name: str) -> str | None`; trả `None` khi không tồn tại; factory/cloud adapter chuyển missing secret thành `AdapterAuthenticationError`; **không** để `SecretError` rò qua `LLMAdapter` boundary; không vừa return None vừa raise cùng trường hợp; không log/representation chứa secret. *Triển khai CP2; CP1 error taxonomy phải có authentication error đúng nghĩa.*
+4. **SecretProvider semantics:** `get(name: str) -> str | None`; trả `None` khi không tồn tại hoặc rỗng; **không tạo `SecretError`** chỉ để biểu diễn missing secret (absence không phải lỗi); factory/cloud adapter chuyển missing secret thành `AdapterAuthenticationError` (CP3/CP6); không vừa return None vừa raise cùng trường hợp; không log/representation chứa secret. *Triển khai CP2; CP1 error taxonomy đã có authentication error đúng nghĩa.*
 5. **Model configuration:** model không hard-code, không là domain constant; config cũ không có `models` vẫn load; invocation khi model/endpoint chưa cấu hình → structured configuration/invalid-request error; không tự chọn model ngầm; sample config + live verification cung cấp model cụ thể.
 6. **Fake/test doubles ngoài production package:** `tests/contracts/llm_contract.py` + `tests/support/fake_llm.py`. Không đặt `FakeLLMAdapter` trong `src/ant_orchestrator` (trừ khi có runtime use case tài liệu hóa). Fake không vào production factory/config, không kéo LiteLLM vào import graph, chỉ phục vụ automated tests.
 
@@ -56,7 +56,7 @@ src/ant_orchestrator/
 │   ├── shell.py          # [CP5] ShellAdapter + ShellRequest/Response + error
 │   ├── test_runner.py    # [CP5] TestRunnerAdapter + DTO + error
 │   ├── git_read.py       # [CP5] GitReadAdapter (read-only) + DTO + error
-│   └── secrets.py        # [CP2] SecretProvider Protocol + SecretError
+│   └── secrets.py        # [CP2] SecretProvider Protocol (no SecretError — absence is None)
 ├── adapters/
 │   ├── litellm_base.py   # [CP3] map DTO<->litellm, normalize usage/finish/error, timeout, log
 │   ├── litellm_cloud.py  # [CP3] LiteLLMCloudAdapter (provider-neutral; OpenAI bootstrap)
@@ -98,7 +98,9 @@ tests/
 - `AdapterAuthenticationError` **không** là subclass/alias của `AdapterInvalidRequestError`.
 - Public message/repr: chỉ `code`/`retryable`/sanitized `provider`/`model`; **không** secret, full prompt, full response, raw provider exception.
 
-**Timeout precedence:** `request.timeout_seconds > endpoint config > DEFAULT_TIMEOUT_SECONDS`; `>0` và `≤ MAX_TIMEOUT_SECONDS`; reject ngoài biên (không clamp). *Resolution logic = CP2.*
+**Timeout precedence (float):** `request.timeout_seconds > endpoint config > DEFAULT_TIMEOUT_SECONDS` (tất cả `float`); hợp lệ = số hữu hạn, `>0`, `≤ MAX_TIMEOUT_SECONDS`. Reject `bool`/`NaN`/`±inf`/ngoài biên (không clamp/round/ép int). `DEFAULT_TIMEOUT_SECONDS=120.0`, `MAX_TIMEOUT_SECONDS=600.0`.
+
+**Config identifier (`provider`/`model`/`base_url`):** phải là string non-empty, **không** surrounding whitespace (`value != value.strip()` ⇒ reject). Không auto-strip/lowercase/normalize. (Secret thì ngược lại: trả nguyên giá trị, chỉ `""`→`None`.)
 
 ---
 
@@ -123,7 +125,8 @@ tests/
 - **Closure:** contract+error+fake+kit xanh, gate xanh, scope audit sạch.
 
 ### CP2 — Model config, timeout policy, SecretProvider
-- `config/models.py` + `config/constants.py` (additive, giữ document version; allowed keys; DEFAULT/MAX timeout); `application/ports/secrets.py` (`SecretProvider.get->str|None`, `SecretError`) + env-backed impl + fake; timeout resolution §5. Config Phase 1 cũ vẫn load; unknown-key reject; secret không vào config/log/repr.
+- `config/models.py` (`ModelEndpointConfig`/`ModelsConfig`; `ResolvedConfig.models` default empty) + `config/constants.py` (allowed keys; `DEFAULT_TIMEOUT_SECONDS=120`/`MAX_TIMEOUT_SECONDS=600`) + `config/timeout.py` (`validate_timeout`/`resolve_timeout`, precedence `request>endpoint>default`, reject ngoài biên không clamp) + `config/resolver.py` (parse/validate `models`); `application/ports/secrets.py` (`SecretProvider.get->str|None`, **không** `SecretError` — absence là `None`); `adapters/env_secret_provider.py` (`EnvSecretProvider`, đọc `os.environ`, infra layer) + `tests/support/fake_secret_provider.py`. Config Phase 1 cũ vẫn load (additive, giữ document version); unknown-key reject; secret không vào config/log/repr. Missing-secret→`AdapterAuthenticationError` để CP3/CP6.
+- **Timeout type đã thống nhất (corrective):** toàn bộ timeout (config `ModelEndpointConfig.timeout_seconds`, `resolve_timeout`, constants) là `float`, khớp trực tiếp `LLMRequest.timeout_seconds: float | None`. CP3 dùng output `resolve_timeout` as-is, không cần conversion. Không còn mismatch float/int.
 
 ### CP3 — LiteLLM shared infra + provider-neutral cloud adapter (OpenAI bootstrap)
 - `adapters/litellm_base.py` + `adapters/litellm_cloud.py` (`LiteLLMCloudAdapter`) + `observability/adapter_log.py`; thêm `litellm` (ADR-0003). Map error→taxonomy; normalize usage; timeout; key qua SecretProvider→missing thành `AdapterAuthenticationError`. Test mock `litellm.acompletion` (no network); contract suite PASS; live `@pytest.mark.live` skip mặc định.
