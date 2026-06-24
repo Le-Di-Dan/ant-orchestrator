@@ -33,7 +33,7 @@ class TestFakeLLMAdapterContract(LLMAdapterContract):
 
 def test_fake_records_received_requests() -> None:
     adapter = FakeLLMAdapter()
-    request = make_request(model="m1")
+    request = make_request()
     asyncio.run(adapter.complete(request))
     assert adapter.received == [request]
 

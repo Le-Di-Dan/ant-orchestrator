@@ -61,7 +61,7 @@ class FakeLLMAdapter:
         return LLMResponse(
             text="fake-response",
             provider=self._identity.provider,
-            model=request.model or _DEFAULT_MODEL,
+            model=_DEFAULT_MODEL,
             usage=ModelUsage.measured(tokens_in=1, tokens_out=1),
             finish_reason=FinishReason.STOP,
         )

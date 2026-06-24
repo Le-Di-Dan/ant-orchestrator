@@ -78,3 +78,39 @@ def test_application_services_no_adapter_imports() -> None:
             "ant_orchestrator.config",
         ),
     )
+
+
+# --- CP3: provider-SDK isolation ---------------------------------------------
+
+PROVIDER_SDKS = {"litellm", "openai"}
+
+
+def _top_imports(path: Path) -> set[str]:
+    return {module.split(".")[0] for module in _imported_modules(path)}
+
+
+def test_config_does_not_import_provider_or_adapters() -> None:
+    for file in _files("config"):
+        modules = _imported_modules(file)
+        assert not ({m.split(".")[0] for m in modules} & PROVIDER_SDKS), (
+            f"{file} imports provider SDK"
+        )
+        for module in modules:
+            assert not module.startswith("ant_orchestrator.adapters"), f"{file} imports adapters"
+
+
+def test_litellm_imported_only_in_adapters() -> None:
+    adapters_dir = PKG_ROOT / "adapters"
+    for file in PKG_ROOT.rglob("*.py"):
+        if "litellm" in _top_imports(file):
+            assert file.is_relative_to(adapters_dir), f"{file} imports litellm outside adapters"
+
+
+def test_no_direct_openai_import_in_src() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        assert "openai" not in _top_imports(file), f"{file} imports the openai SDK directly"
+
+
+def test_fake_llm_support_is_provider_free() -> None:
+    fake = Path(__file__).parent / "support" / "fake_llm.py"
+    assert not (_top_imports(fake) & PROVIDER_SDKS), "fake_llm.py imports a provider SDK"

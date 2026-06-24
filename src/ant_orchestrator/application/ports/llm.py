@@ -111,22 +111,19 @@ class LLMMessage:
 class LLMRequest:
     """An immutable request for a single completion.
 
-    ``model`` is supplied by the caller/config — never hard-coded in an adapter.
-    ``timeout_seconds`` is an optional per-request override; the full precedence
-    resolution lives in the config/timeout layer (CP2), not in this DTO.
+    A request carries only content and inference options. It does NOT choose a
+    model: the provider/model is endpoint-scoped — an adapter is bound to a
+    ``ModelEndpointConfig`` (see ``LLMResponse.provider``/``model`` for what was
+    actually used). ``timeout_seconds`` is an optional per-request override; the
+    full precedence resolution lives in the config/timeout layer (CP2).
     """
 
-    model: str
     messages: tuple[LLMMessage, ...] = ()
     system_prompt: str | None = None
     temperature: float | None = None
     max_output_tokens: int | None = None
     timeout_seconds: float | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.model:
-            raise InvariantViolation("LLMRequest.model must be a non-empty string")
 
 
 @dataclass(frozen=True, slots=True)

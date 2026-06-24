@@ -58,15 +58,18 @@ src/ant_orchestrator/
 │   ├── git_read.py       # [CP5] GitReadAdapter (read-only) + DTO + error
 │   └── secrets.py        # [CP2] SecretProvider Protocol (no SecretError — absence is None)
 ├── adapters/
-│   ├── litellm_base.py   # [CP3] map DTO<->litellm, normalize usage/finish/error, timeout, log
-│   ├── litellm_cloud.py  # [CP3] LiteLLMCloudAdapter (provider-neutral; OpenAI bootstrap)
-│   ├── ollama_local.py   # [CP4] OllamaAdapter (is_local, api_base, dùng litellm_base)
-│   └── factory.py        # [CP6] build_llm_adapter(config, secrets) — provider hợp lệ
+│   ├── env_secret_provider.py  # [CP2] EnvSecretProvider (os.environ)
+│   ├── litellm_client.py   # [CP3] LiteLLMCompletionClient seam + LiteLLMSdkClient (lazy import)
+│   ├── litellm_mapping.py  # [CP3] model id / payload / response+usage+finish normalization
+│   ├── litellm_errors.py   # [CP3] map_litellm_error -> taxonomy (lazy import)
+│   ├── litellm_cloud.py    # [CP3] LiteLLMCloudAdapter (provider-neutral; OpenAI bootstrap)
+│   ├── adapter_log.py      # [CP3] sanitized structured logging (stdlib)
+│   ├── ollama_local.py     # [CP4] OllamaAdapter (is_local, api_base)
+│   └── factory.py          # [CP6] build_llm_adapter(config, secrets) — provider hợp lệ
 ├── config/
 │   ├── models.py         # [CP2] + ModelsConfig, ModelEndpointConfig
+│   ├── timeout.py        # [CP2] validate_timeout / resolve_timeout (float)
 │   └── constants.py      # [CP2] + allowed keys, env names, DEFAULT/MAX timeout
-└── observability/
-    └── adapter_log.py    # [CP3] structured sanitized adapter logging
 
 tests/
 ├── contracts/llm_contract.py   # [CP1] reusable LLMAdapterContract (Fake/Cloud/Ollama)
@@ -128,8 +131,14 @@ tests/
 - `config/models.py` (`ModelEndpointConfig`/`ModelsConfig`; `ResolvedConfig.models` default empty) + `config/constants.py` (allowed keys; `DEFAULT_TIMEOUT_SECONDS=120`/`MAX_TIMEOUT_SECONDS=600`) + `config/timeout.py` (`validate_timeout`/`resolve_timeout`, precedence `request>endpoint>default`, reject ngoài biên không clamp) + `config/resolver.py` (parse/validate `models`); `application/ports/secrets.py` (`SecretProvider.get->str|None`, **không** `SecretError` — absence là `None`); `adapters/env_secret_provider.py` (`EnvSecretProvider`, đọc `os.environ`, infra layer) + `tests/support/fake_secret_provider.py`. Config Phase 1 cũ vẫn load (additive, giữ document version); unknown-key reject; secret không vào config/log/repr. Missing-secret→`AdapterAuthenticationError` để CP3/CP6.
 - **Timeout type đã thống nhất (corrective):** toàn bộ timeout (config `ModelEndpointConfig.timeout_seconds`, `resolve_timeout`, constants) là `float`, khớp trực tiếp `LLMRequest.timeout_seconds: float | None`. CP3 dùng output `resolve_timeout` as-is, không cần conversion. Không còn mismatch float/int.
 
-### CP3 — LiteLLM shared infra + provider-neutral cloud adapter (OpenAI bootstrap)
-- `adapters/litellm_base.py` + `adapters/litellm_cloud.py` (`LiteLLMCloudAdapter`) + `observability/adapter_log.py`; thêm `litellm` (ADR-0003). Map error→taxonomy; normalize usage; timeout; key qua SecretProvider→missing thành `AdapterAuthenticationError`. Test mock `litellm.acompletion` (no network); contract suite PASS; live `@pytest.mark.live` skip mặc định.
+### CP3 — LiteLLM shared infra + provider-neutral cloud adapter (OpenAI bootstrap) — IMPLEMENTED
+- **Dependency:** `litellm>=1.89.3,<1.90` (ADR-0003; tested on **1.89.3**, Python 3.11.8). Pulls `openai` transitively (Ant code never imports `openai` directly). LiteLLM pins `typer` 0.25.1 (downgrade từ 0.26.7; gate vẫn PASS).
+- **Module layout (deviation từ plan gốc):** thay vì một `litellm_base.py` + package `observability/`, tách theo SRP trong `adapters/`: `litellm_client.py` (seam, **lazy import** litellm), `litellm_mapping.py` (pure mapping, không import litellm — đọc raw duck-typed), `litellm_errors.py` (`map_litellm_error`, lazy import), `litellm_cloud.py` (`LiteLLMCloudAdapter`), `adapter_log.py` (sanitized logging). Không tạo package `observability/` (tránh thêm top-level package ngoài PROJECT_STRUCTURE; cần ADR).
+- **Seam DI:** adapter nhận `LiteLLMCompletionClient` injectable → test dùng fake, không monkeypatch global; litellm chỉ import khi gọi SDK/map error thật.
+- **Semantics:** model id compose một lần `provider/model`, **cho phép nested namespace** trong model (vd `org/name`, `anthropic/name`), chỉ reject khi model đã bắt đầu bằng **chính** prefix `provider/` (tránh double-prefix); không strip/lowercase/split. Request payload allowlist (`stream=False`, `num_retries=0`, timeout float as-is, api_key explicit, api_base chỉ khi có); usage MEASURED/UNAVAILABLE (partial → UNAVAILABLE, không zero-fill; token bool/âm/non-int/total lệch → `AdapterResponseError`); finish reason unknown → `UNKNOWN`; error map theo class (Timeout trước APIConnectionError); `asyncio.CancelledError` pass-through; missing secret → `AdapterAuthenticationError` không gọi SDK.
+- **mypy:** override `litellm`/`litellm.*` = `follow_imports=skip` (untyped boundary; không hạ chuẩn code của ta).
+- **Tests:** fake seam (no network/secret); contract suite PASS với `LiteLLMCloudAdapter`; error-map test import litellm để dựng exception; gated `@pytest.mark.live_openai` skip mặc định.
+- **Contract refinement (corrective, trước khi đóng Phase 2):** adapter là **endpoint-bound** — `LLMRequest` **chỉ** mang content + inference options (messages/system_prompt/temperature/max_output_tokens/timeout_seconds/metadata), **không** chọn model. Đã **xóa hẳn** field `LLMRequest.model` (không alias/deprecated). **Một source of truth duy nhất cho model/provider = `ModelEndpointConfig`** (adapter binding); `LLMResponse` mang provider/model thực tế đã dùng; `LLMAdapter.identity`/log lấy từ endpoint. Model routing/selection thuộc phase sau. (Note N-CP3-1 đã đóng.)
 
 ### CP4 — Ollama adapter
 - `adapters/ollama_local.py` (`is_local`, `api_base`, dùng `litellm_base`, không duplicate normalization); ollama-down → `AdapterConnectionError(retryable)`. Contract suite (mock); live `@pytest.mark.live_ollama` skip mặc định.

@@ -48,10 +48,9 @@ ERROR_CASES = [
 ]
 
 
-def make_request(model: str = "contract-model") -> LLMRequest:
+def make_request() -> LLMRequest:
     """Build a canonical request carrying a secret-like system prompt."""
     return LLMRequest(
-        model=model,
         messages=(LLMMessage(MessageRole.USER, "hello"),),
         system_prompt=SECRET_MARKER,
     )

@@ -86,9 +86,11 @@ def test_estimated_usage_follows_same_shape_rules() -> None:
 # --- DTO immutability / invariants -------------------------------------------
 
 
-def test_request_rejects_empty_model() -> None:
-    with pytest.raises(InvariantViolation):
-        LLMRequest(model="")
+def test_request_has_no_model_field() -> None:
+    # A request carries content/options only; provider/model is endpoint-scoped.
+    from dataclasses import fields
+
+    assert "model" not in {f.name for f in fields(LLMRequest)}
 
 
 def test_response_is_frozen() -> None:
