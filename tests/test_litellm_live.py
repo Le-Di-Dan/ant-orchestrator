@@ -25,7 +25,13 @@ _HAVE_CREDS = bool(os.environ.get("OPENAI_API_KEY") and os.environ.get("ANT_LIVE
 def test_live_openai_smoke() -> None:
     from ant_orchestrator.adapters.env_secret_provider import EnvSecretProvider
     from ant_orchestrator.adapters.litellm_cloud import LiteLLMCloudAdapter
-    from ant_orchestrator.application.ports.llm import LLMMessage, LLMRequest, MessageRole
+    from ant_orchestrator.application.ports.llm import (
+        FinishReason,
+        LLMMessage,
+        LLMRequest,
+        MessageRole,
+        UsageStatus,
+    )
     from ant_orchestrator.config.models import ModelEndpointConfig
 
     model = os.environ["ANT_LIVE_OPENAI_MODEL"]
@@ -39,4 +45,8 @@ def test_live_openai_smoke() -> None:
     )
     response = asyncio.run(adapter.complete(request))
     assert response.provider == "openai"
+    assert response.model == model
+    assert adapter.capabilities.is_local is False
     assert isinstance(response.text, str) and response.text  # never log content
+    assert isinstance(response.finish_reason, FinishReason)
+    assert response.usage.status in (UsageStatus.MEASURED, UsageStatus.UNAVAILABLE)

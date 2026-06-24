@@ -27,6 +27,7 @@ _HAVE_CONFIG = bool(
 def test_live_ollama_smoke() -> None:
     from ant_orchestrator.adapters.ollama_local import OllamaAdapter
     from ant_orchestrator.application.ports.llm import (
+        FinishReason,
         LLMMessage,
         LLMRequest,
         MessageRole,
@@ -34,10 +35,11 @@ def test_live_ollama_smoke() -> None:
     )
     from ant_orchestrator.config.models import ModelEndpointConfig
 
+    model = os.environ["ANT_LIVE_OLLAMA_MODEL"]
     adapter = OllamaAdapter(
         ModelEndpointConfig(
             provider="ollama",
-            model=os.environ["ANT_LIVE_OLLAMA_MODEL"],
+            model=model,
             base_url=os.environ["ANT_LIVE_OLLAMA_BASE_URL"],
         )
     )
@@ -48,5 +50,8 @@ def test_live_ollama_smoke() -> None:
     )
     response = asyncio.run(adapter.complete(request))
     assert response.provider == "ollama"
+    assert response.model == model
+    assert adapter.capabilities.is_local is True
     assert isinstance(response.text, str) and response.text  # never log content
+    assert isinstance(response.finish_reason, FinishReason)
     assert response.usage.status in (UsageStatus.MEASURED, UsageStatus.UNAVAILABLE)

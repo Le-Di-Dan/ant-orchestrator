@@ -137,3 +137,28 @@ def test_no_real_execution_libraries_in_src() -> None:
     for file in PKG_ROOT.rglob("*.py"):
         leaked = _top_imports(file) & REAL_EXECUTION_LIBS
         assert not leaked, f"{file} imports a real-execution library {leaked}"
+
+
+# --- CP6: factory/composition isolation --------------------------------------
+
+
+def test_production_source_does_not_import_tests() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        for module in _imported_modules(file):
+            assert module.split(".")[0] != "tests", f"{file} imports test code {module}"
+
+
+def test_factory_imports_only_allowed_internal_modules() -> None:
+    factory = PKG_ROOT / "adapters" / "factory.py"
+    allowed = (
+        "ant_orchestrator.adapters.litellm_client",
+        "ant_orchestrator.adapters.litellm_cloud",
+        "ant_orchestrator.adapters.ollama_local",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+    )
+    for module in _imported_modules(factory):
+        if module.startswith("ant_orchestrator"):
+            ok = any(module == p or module.startswith(p + ".") for p in allowed)
+            assert ok, f"factory imports disallowed internal {module}"
+        assert "fake" not in module, f"factory imports a test double: {module}"
