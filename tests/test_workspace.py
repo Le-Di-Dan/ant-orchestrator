@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import FakeClock, SequentialIdGenerator
 
 from ant_orchestrator.application.ports.workspace import (
     NestedNestNotAllowed,
@@ -24,6 +23,7 @@ from ant_orchestrator.workspace.layout import (
     SUBDIRECTORIES,
 )
 from ant_orchestrator.workspace.nest import FilesystemWorkspaceProvisioner
+from tests.conftest import FakeClock, SequentialIdGenerator
 
 
 def _provisioner(clock: FakeClock, id_gen: SequentialIdGenerator) -> FilesystemWorkspaceProvisioner:

@@ -6,7 +6,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from conftest import FakeClock, SequentialIdGenerator
 
 from ant_orchestrator.application.models.nest_state import NestState, aggregate
 from ant_orchestrator.application.models.outcomes import InitNestOutcome
@@ -33,6 +32,7 @@ from ant_orchestrator.persistence.migrations import (
 from ant_orchestrator.persistence.schema import MIGRATIONS_TABLE
 from ant_orchestrator.workspace.layout import ANT_DIRNAME, MARKER_FILENAME
 from ant_orchestrator.workspace.nest import FilesystemWorkspaceProvisioner
+from tests.conftest import FakeClock, SequentialIdGenerator
 
 
 def _init_service(clock: FakeClock, id_gen: SequentialIdGenerator) -> InitNestService:

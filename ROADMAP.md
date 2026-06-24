@@ -259,7 +259,7 @@ Memory retrieval nâng cao; LangGraph; gọi model thật; embedding/vector.
 
 ### Phase 2 — Adapter Contracts, Model Gateway & Test Doubles
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
 
 #### Mục tiêu
 Ranh giới adapter **provider-neutral** + gateway thật tối thiểu, không xây mọi provider.

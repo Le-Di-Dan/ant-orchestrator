@@ -6,7 +6,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from conftest import FakeClock
 
 from ant_orchestrator.application.ports.database import (
     DatabaseState,
@@ -18,6 +17,7 @@ from ant_orchestrator.persistence.migrations import (
     SqliteDatabaseInspector,
 )
 from ant_orchestrator.persistence.schema import MIGRATIONS_TABLE
+from tests.conftest import FakeClock
 
 
 def _bootstrapper(clock: FakeClock) -> SqliteDatabaseBootstrapper:

@@ -18,5 +18,25 @@ ENV_PROJECT_NAME: Final = "ANT_PROJECT_NAME"
 KEY_VERSION: Final = "version"
 KEY_PROJECT: Final = "project"
 KEY_PROJECT_NAME: Final = "name"
-ALLOWED_TOP_LEVEL_KEYS: Final = frozenset({KEY_VERSION, KEY_PROJECT})
+KEY_MODELS: Final = "models"
+ALLOWED_TOP_LEVEL_KEYS: Final = frozenset({KEY_VERSION, KEY_PROJECT, KEY_MODELS})
 ALLOWED_PROJECT_KEYS: Final = frozenset({KEY_PROJECT_NAME})
+
+# Optional model-endpoint section (provider-neutral; no secret/api-key fields, D12).
+KEY_MODELS_QUEEN: Final = "queen"
+KEY_MODELS_LOCAL: Final = "local"
+ALLOWED_MODELS_KEYS: Final = frozenset({KEY_MODELS_QUEEN, KEY_MODELS_LOCAL})
+
+KEY_ENDPOINT_PROVIDER: Final = "provider"
+KEY_ENDPOINT_MODEL: Final = "model"
+KEY_ENDPOINT_TIMEOUT: Final = "timeout_seconds"
+KEY_ENDPOINT_BASE_URL: Final = "base_url"
+ALLOWED_ENDPOINT_KEYS: Final = frozenset(
+    {KEY_ENDPOINT_PROVIDER, KEY_ENDPOINT_MODEL, KEY_ENDPOINT_TIMEOUT, KEY_ENDPOINT_BASE_URL}
+)
+
+# Timeout policy (seconds, float). Single source of truth; never hard-coded in
+# adapters. Resolved timeouts are always float so they line up directly with
+# ``LLMRequest.timeout_seconds`` (float | None).
+DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
+MAX_TIMEOUT_SECONDS: Final[float] = 600.0

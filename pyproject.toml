@@ -11,6 +11,9 @@ requires-python = ">=3.11"
 dependencies = [
     "typer",
     "pyyaml",
+    # LLM gateway (ADR-0003). Narrow range: tested on 1.89.3; LiteLLM may break on
+    # minor bumps, so cap below the next minor to avoid untested releases.
+    "litellm>=1.89.3,<1.90",
 ]
 
 [project.optional-dependencies]
@@ -53,6 +56,18 @@ strict = true
 warn_unused_ignores = true
 no_implicit_reexport = true
 
+# LiteLLM's package re-exports are not declared for strict checkers; treat it as an
+# untyped boundary (seam/error-mapping modules only). Does not relax our code.
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "live_openai: real OpenAI call via LiteLLM (skipped by default; needs OPENAI_API_KEY + ANT_LIVE_OPENAI_MODEL)",
+    "live_ollama: real local Ollama call (skipped by default; needs ANT_LIVE_OLLAMA_MODEL + ANT_LIVE_OLLAMA_BASE_URL)",
+]
 
