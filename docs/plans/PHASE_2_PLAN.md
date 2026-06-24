@@ -52,10 +52,12 @@ src/ant_orchestrator/
 │   │                     #   ModelUsage, UsageStatus, FinishReason,
 │   │                     #   AdapterIdentity, AdapterCapabilities  (KHÔNG cost)
 │   ├── llm_errors.py     # AdapterError(AntError) + 7 subclass + AdapterErrorCode + retryable
-│   ├── filesystem.py     # [CP5] FileSystemAdapter Protocol + DTO + error
-│   ├── shell.py          # [CP5] ShellAdapter + ShellRequest/Response + error
-│   ├── test_runner.py    # [CP5] TestRunnerAdapter + DTO + error
-│   ├── git_read.py       # [CP5] GitReadAdapter (read-only) + DTO + error
+│   ├── filesystem.py     # [CP5] FileSystemAdapter Protocol + read/write DTOs
+│   ├── shell.py          # [CP5] ShellAdapter (argv) + ShellRequest/Result
+│   ├── test_runner.py    # [CP5] TestRunnerAdapter + TestOutcome + DTOs
+│   ├── git_read.py       # [CP5] GitReadAdapter (read-only: status/diff) + DTOs
+│   ├── tool_errors.py    # [CP5] ToolAdapterError taxonomy (shared)
+│   ├── tool_common.py    # [CP5] ToolKind + ToolInvocationMetadata
 │   └── secrets.py        # [CP2] SecretProvider Protocol (no SecretError — absence is None)
 ├── adapters/
 │   ├── env_secret_provider.py  # [CP2] EnvSecretProvider (os.environ)
@@ -150,8 +152,17 @@ tests/
 - **Errors:** dùng shared mapping — ollama-down (`APIConnectionError`) → `AdapterConnectionError(retryable)`; timeout → `AdapterTimeoutError`; CancelledError pass-through.
 - **Tests:** fake seam (no Ollama); contract suite PASS với `OllamaAdapter`; gated `@pytest.mark.live_ollama` (cần `ANT_LIVE_OLLAMA_MODEL`+`ANT_LIVE_OLLAMA_BASE_URL`) skip mặc định. Boundary: cấm import `ollama` SDK; cloud/ollama không import lẫn nhau. Không thêm dependency.
 
-### CP5 — Tool contracts + separated fakes
-- `application/ports/{filesystem,shell,test_runner,git_read}.py` (mỗi loại 1 file, SRP) + fake riêng; Git **read-only** (không write op); **không** real exec/enforcement; ShellResponse có exit_code/stdout/stderr/duration.
+### CP5 — Tool contracts + separated fakes — IMPLEMENTED
+- **Ports (async, mỗi loại 1 file SRP):** `application/ports/filesystem.py` (`FileSystemAdapter`: `read_text`/`write_text` + DTOs), `shell.py` (`ShellAdapter.run`; request = **argv tuple** không raw string/`shell=True`; result exit_code/stdout/stderr/duration_seconds), `test_runner.py` (`TestRunnerAdapter.run`; framework-neutral, `TestOutcome.PASSED/FAILED`), `git_read.py` (`GitReadAdapter`: `status`/`diff` — **read-only tuyệt đối**, không có bất kỳ write op).
+- **Shared:** `tool_errors.py` (`ToolAdapterError(AntError)` + `ToolInvalidRequestError`/`NotFound`/`Permission`/`Timeout`(retryable)/`Execution`; code ổn định + retryable; sanitized — không command/output/content/secret/raw-exc). `tool_common.py` (`ToolKind` + `ToolInvocationMetadata` = bằng chứng tool/operation tối thiểu, không persist/log/energy/approval).
+- **Async decision:** mọi operation `async def` (I/O; FastAPI/LangGraph sau này dùng async). Fakes cũng async.
+- **Expected negative ≠ adapter error:** shell exit≠0, test FAILED, repo dirty, diff rỗng, file rỗng đều là **result hợp lệ**; adapter error chỉ cho failure boundary.
+- **Fakes (ngoài `src/`):** `tests/support/fake_{filesystem,shell,test_runner,git_read}.py` (in-memory/scripted, ghi nhận request, mô phỏng error; **không** real I/O/process/git). Reusable contract suites: `tests/contracts/{filesystem,shell,test_runner,git_read}_contract.py`.
+- **Boundary:** không real-execution lib trong `src/` (`subprocess`/`git`/`dulwich`…); structural test chứng minh `GitReadAdapter` không expose write op. **Không** dependency mới; **không** enforcement (path/command allowlist, redaction, sandbox = Phase 3).
+- **Deviation:** path = `str` workspace-relative (chưa có path VO Phase 1; enforcement Phase 3). Production ports `Test*` (TestRunnerAdapter/TestRunRequest/TestRunResult/TestOutcome) gắn `__test__ = False` để pytest không collect (giữ tên theo PO, gate sạch không warning).
+- **Contract refinement (corrective, trước khi đóng CP5):**
+  - **Shell argv:** chỉ executable `argv[0]` bắt buộc non-empty/non-whitespace; arguments sau (`argv[1:]`) **được phép rỗng/whitespace** và **giữ nguyên** (không strip/lọc). Vẫn argv-tuple, không raw shell string, không `shell=True`. Adapter/fake giữ nguyên argv chính xác.
+  - **Tool error sanitization:** `ToolAdapterError` constructor **chỉ** nhận `tool`/`operation`/`retryable` — **không** message tự do. **Cả `str` lẫn `repr`** chỉ render code + sanitized identity (tool/operation/retryable); public state (`__dict__`) chỉ gồm `{tool, operation, retryable}`; `args` chỉ chứa summary đã sanitize. Không lưu raw command/output/content/diff/secret/cause. Fakes mô phỏng lỗi bằng structured sanitized errors.
 
 ### CP6 — Factory, composition, boundary regression, live verification, closure
 - `adapters/factory.py` (`build_llm_adapter` chỉ provider hợp lệ; reject `fake`); composition wiring (env SecretProvider + factory, không dead bridge); mở rộng AST boundary; **live verification bắt buộc ≥1 lần** (1 OpenAI + 1 Ollama qua cùng contract, sanitized evidence) trước khi tuyên bố COMPLETE; `PHASE_2_COMPLETION_REPORT.md`.

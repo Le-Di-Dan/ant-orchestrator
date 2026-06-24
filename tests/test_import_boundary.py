@@ -126,3 +126,14 @@ def test_cloud_and_local_adapters_do_not_import_each_other() -> None:
 def test_fake_llm_support_is_provider_free() -> None:
     fake = Path(__file__).parent / "support" / "fake_llm.py"
     assert not (_top_imports(fake) & PROVIDER_SDKS), "fake_llm.py imports a provider SDK"
+
+
+# --- CP5: tool ports declare contracts only (no real execution libs) ---------
+
+REAL_EXECUTION_LIBS = {"subprocess", "git", "dulwich", "gitpython", "pygit2"}
+
+
+def test_no_real_execution_libraries_in_src() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        leaked = _top_imports(file) & REAL_EXECUTION_LIBS
+        assert not leaked, f"{file} imports a real-execution library {leaked}"
