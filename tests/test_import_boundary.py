@@ -162,3 +162,24 @@ def test_factory_imports_only_allowed_internal_modules() -> None:
             ok = any(module == p or module.startswith(p + ".") for p in allowed)
             assert ok, f"factory imports disallowed internal {module}"
         assert "fake" not in module, f"factory imports a test double: {module}"
+
+
+# --- CP0: security policy purity + audit sink containment (ADR-0006) ----------
+
+
+def test_security_layer_is_pure() -> None:
+    _assert_layer(
+        "security",
+        ("ant_orchestrator.errors", "ant_orchestrator.core.domain", "ant_orchestrator.security"),
+    )
+
+
+def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
+    sink = "ant_orchestrator.adapters.jsonl_audit_sink"
+    outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli")
+    for file in PKG_ROOT.rglob("*.py"):
+        if any(file.is_relative_to(directory) for directory in outer):
+            continue
+        assert sink not in _imported_modules(file), (
+            f"{file} imports the audit sink adapter directly (depend on AuditSink instead)"
+        )
