@@ -68,5 +68,6 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "live_openai: real OpenAI call via LiteLLM (skipped by default; needs OPENAI_API_KEY + ANT_LIVE_OPENAI_MODEL)",
+    "live_ollama: real local Ollama call (skipped by default; needs ANT_LIVE_OLLAMA_MODEL + ANT_LIVE_OLLAMA_BASE_URL)",
 ]
 

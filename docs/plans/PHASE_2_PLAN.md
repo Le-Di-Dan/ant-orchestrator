@@ -64,7 +64,8 @@ src/ant_orchestrator/
 │   ├── litellm_errors.py   # [CP3] map_litellm_error -> taxonomy (lazy import)
 │   ├── litellm_cloud.py    # [CP3] LiteLLMCloudAdapter (provider-neutral; OpenAI bootstrap)
 │   ├── adapter_log.py      # [CP3] sanitized structured logging (stdlib)
-│   ├── ollama_local.py     # [CP4] OllamaAdapter (is_local, api_base)
+│   ├── litellm_invoke.py   # [CP4] run_completion: shared execute+normalize+map+log flow
+│   ├── ollama_local.py     # [CP4] OllamaAdapter (is_local, base_url bắt buộc, no secret)
 │   └── factory.py          # [CP6] build_llm_adapter(config, secrets) — provider hợp lệ
 ├── config/
 │   ├── models.py         # [CP2] + ModelsConfig, ModelEndpointConfig
@@ -140,8 +141,14 @@ tests/
 - **Tests:** fake seam (no network/secret); contract suite PASS với `LiteLLMCloudAdapter`; error-map test import litellm để dựng exception; gated `@pytest.mark.live_openai` skip mặc định.
 - **Contract refinement (corrective, trước khi đóng Phase 2):** adapter là **endpoint-bound** — `LLMRequest` **chỉ** mang content + inference options (messages/system_prompt/temperature/max_output_tokens/timeout_seconds/metadata), **không** chọn model. Đã **xóa hẳn** field `LLMRequest.model` (không alias/deprecated). **Một source of truth duy nhất cho model/provider = `ModelEndpointConfig`** (adapter binding); `LLMResponse` mang provider/model thực tế đã dùng; `LLMAdapter.identity`/log lấy từ endpoint. Model routing/selection thuộc phase sau. (Note N-CP3-1 đã đóng.)
 
-### CP4 — Ollama adapter
-- `adapters/ollama_local.py` (`is_local`, `api_base`, dùng `litellm_base`, không duplicate normalization); ollama-down → `AdapterConnectionError(retryable)`. Contract suite (mock); live `@pytest.mark.live_ollama` skip mặc định.
+### CP4 — Ollama adapter — IMPLEMENTED
+- **`adapters/ollama_local.py` (`OllamaAdapter`):** class **riêng** (local semantics) nhưng **tái dùng tối đa** shared infra — không duplicate mapping/error/logging.
+- **Refactor tối thiểu cho reuse:** tách flow chung (execute seam → normalize → map error → log, CancelledError pass-through) ra `adapters/litellm_invoke.py::run_completion`; cloud + ollama đều gọi `run_completion`. `to_completion_payload` cho `api_key` **optional** (omit khi None) — cloud truyền key, ollama không. **Không** đổi public CP1 contract.
+- **Endpoint semantics:** provider **phải** `== "ollama"` (else reject trước SDK); model từ `ModelEndpointConfig` (nested cho phép; same-provider prefix reject qua shared helper); **không** secret/`SecretProvider`/`api_key`.
+- **`base_url` BẮT BUỘC:** None → `AdapterInvalidRequestError` trước SDK; truyền **nguyên trạng** thành `api_base` (không nối `/api`/`/v1`, không strip/rewrite, không log).
+- **Capability:** `is_local=True`; identity provider=ollama, model=config; response provider/model khớp endpoint.
+- **Errors:** dùng shared mapping — ollama-down (`APIConnectionError`) → `AdapterConnectionError(retryable)`; timeout → `AdapterTimeoutError`; CancelledError pass-through.
+- **Tests:** fake seam (no Ollama); contract suite PASS với `OllamaAdapter`; gated `@pytest.mark.live_ollama` (cần `ANT_LIVE_OLLAMA_MODEL`+`ANT_LIVE_OLLAMA_BASE_URL`) skip mặc định. Boundary: cấm import `ollama` SDK; cloud/ollama không import lẫn nhau. Không thêm dependency.
 
 ### CP5 — Tool contracts + separated fakes
 - `application/ports/{filesystem,shell,test_runner,git_read}.py` (mỗi loại 1 file, SRP) + fake riêng; Git **read-only** (không write op); **không** real exec/enforcement; ShellResponse có exit_code/stdout/stderr/duration.

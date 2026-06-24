@@ -111,6 +111,18 @@ def test_no_direct_openai_import_in_src() -> None:
         assert "openai" not in _top_imports(file), f"{file} imports the openai SDK directly"
 
 
+def test_no_ollama_sdk_import_in_src() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        assert "ollama" not in _top_imports(file), f"{file} imports the ollama SDK directly"
+
+
+def test_cloud_and_local_adapters_do_not_import_each_other() -> None:
+    cloud = _imported_modules(PKG_ROOT / "adapters" / "litellm_cloud.py")
+    local = _imported_modules(PKG_ROOT / "adapters" / "ollama_local.py")
+    assert "ant_orchestrator.adapters.ollama_local" not in cloud
+    assert "ant_orchestrator.adapters.litellm_cloud" not in local
+
+
 def test_fake_llm_support_is_provider_free() -> None:
     fake = Path(__file__).parent / "support" / "fake_llm.py"
     assert not (_top_imports(fake) & PROVIDER_SDKS), "fake_llm.py imports a provider SDK"

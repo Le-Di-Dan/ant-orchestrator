@@ -1,13 +1,10 @@
-"""Provider-neutral cloud LLM adapter backed by LiteLLM (CP3).
+"""Local Ollama LLM adapter backed by the shared LiteLLM infrastructure (CP4).
 
-Implements the neutral ``LLMAdapter`` async contract. Provider/model/base URL come
-from a :class:`ModelEndpointConfig`; the API key comes from a ``SecretProvider``.
-LiteLLM is reached only through an injected :class:`LiteLLMCompletionClient` seam,
-so unit tests run without network or real secrets. No LiteLLM/OpenAI type is exposed
-on the public surface.
-
-OpenAI is the bootstrap provider; the class stays provider-neutral — adding another
-cloud provider means extending ``_SECRET_ENV_BY_PROVIDER``, not changing the contract.
+A separate class from the cloud adapter because local deployment differs: no
+credential, a required ``base_url``, and ``is_local=True``. It reuses the shared
+seam, payload mapping, model-id helper, response/usage/error normalization,
+logging and timeout resolver — no provider logic is duplicated. No Ollama SDK and
+no HTTP client are imported; everything goes through LiteLLM.
 """
 
 from __future__ import annotations
@@ -27,38 +24,39 @@ from ant_orchestrator.application.ports.llm import (
     LLMRequest,
     LLMResponse,
 )
-from ant_orchestrator.application.ports.llm_errors import (
-    AdapterAuthenticationError,
-    AdapterInvalidRequestError,
-)
-from ant_orchestrator.application.ports.secrets import SecretProvider
+from ant_orchestrator.application.ports.llm_errors import AdapterInvalidRequestError
 from ant_orchestrator.config.models import ModelEndpointConfig
 from ant_orchestrator.config.timeout import resolve_timeout
 
-# Cloud providers implemented in Phase 2, mapped to their secret env name.
-_SECRET_ENV_BY_PROVIDER = {"openai": "OPENAI_API_KEY"}
+_OLLAMA_PROVIDER = "ollama"
 
 
-class LiteLLMCloudAdapter:
-    """Calls a cloud model through LiteLLM behind the neutral ``LLMAdapter`` contract."""
+class OllamaAdapter:
+    """Calls a local Ollama model through the shared LiteLLM seam (no credential)."""
 
     def __init__(
         self,
         endpoint: ModelEndpointConfig,
-        secrets: SecretProvider,
         *,
         client: LiteLLMCompletionClient | None = None,
     ) -> None:
-        if endpoint.provider not in _SECRET_ENV_BY_PROVIDER:
+        if endpoint.provider != _OLLAMA_PROVIDER:
             raise AdapterInvalidRequestError(
-                "unsupported cloud provider", provider=endpoint.provider, model=endpoint.model
+                "OllamaAdapter requires provider 'ollama'",
+                provider=endpoint.provider,
+                model=endpoint.model,
+            )
+        if endpoint.base_url is None:
+            raise AdapterInvalidRequestError(
+                "Ollama endpoint requires an explicit base_url",
+                provider=endpoint.provider,
+                model=endpoint.model,
             )
         # Fail fast: compose the model id once at construction.
         self._model_id = build_litellm_model_id(endpoint.provider, endpoint.model)
         self._endpoint = endpoint
-        self._secrets = secrets
+        self._base_url: str = endpoint.base_url
         self._client: LiteLLMCompletionClient = client if client is not None else LiteLLMSdkClient()
-        self._secret_name = _SECRET_ENV_BY_PROVIDER[endpoint.provider]
 
     @property
     def identity(self) -> AdapterIdentity:
@@ -66,21 +64,15 @@ class LiteLLMCloudAdapter:
 
     @property
     def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(is_local=False)
+        return AdapterCapabilities(is_local=True)
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         provider, model = self._endpoint.provider, self._endpoint.model
         timeout = resolve_timeout(request.timeout_seconds, self._endpoint.timeout_seconds)
-        api_key = self._secrets.get(self._secret_name)
-        if not api_key:
-            raise AdapterAuthenticationError(
-                "missing API credential", provider=provider, model=model
-            )
         payload = to_completion_payload(
             request,
             model_id=self._model_id,
-            api_key=api_key,
-            base_url=self._endpoint.base_url,
             timeout=timeout,
+            base_url=self._base_url,
         )
         return await run_completion(self._client, payload, provider=provider, model=model)

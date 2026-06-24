@@ -54,11 +54,15 @@ def to_completion_payload(
     request: LLMRequest,
     *,
     model_id: str,
-    api_key: str,
-    base_url: str | None,
     timeout: float,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> dict[str, object]:
-    """Build an explicit, allow-listed LiteLLM payload (no request mutation)."""
+    """Build an explicit, allow-listed LiteLLM payload (no request mutation).
+
+    ``api_key`` is omitted when ``None`` (local Ollama needs no credential);
+    ``base_url`` is passed verbatim as ``api_base`` when provided.
+    """
     messages: list[dict[str, str]] = []
     if request.system_prompt is not None:
         messages.append({"role": "system", "content": request.system_prompt})
@@ -67,17 +71,18 @@ def to_completion_payload(
     payload: dict[str, object] = {
         "model": model_id,
         "messages": messages,
-        "api_key": api_key,
         "timeout": timeout,
         "stream": False,
         "num_retries": 0,
     }
+    if api_key is not None:
+        payload["api_key"] = api_key
+    if base_url is not None:
+        payload["api_base"] = base_url
     if request.temperature is not None:
         payload["temperature"] = request.temperature
     if request.max_output_tokens is not None:
         payload["max_tokens"] = request.max_output_tokens
-    if base_url is not None:
-        payload["api_base"] = base_url
     return payload
 
 
