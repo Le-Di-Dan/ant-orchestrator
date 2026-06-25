@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, Protocol, runtime_checkable
 
+from ant_orchestrator.core.domain.enums import PolicyDecision as PolicyDecision
 from ant_orchestrator.core.domain.errors import InvariantViolation
 from ant_orchestrator.core.domain.value_objects import Identifier, UtcTimestamp
 
@@ -38,13 +39,6 @@ class AuditEventType(Enum):
     ENERGY_RESERVATION = "energy_reservation"
     ROUTING_DECISION = "routing_decision"
     ENERGY_ENFORCEMENT = "energy_enforcement"
-
-
-class PolicyDecision(Enum):
-    """Allow/deny outcome of a policy decision (``None`` for non-policy events)."""
-
-    ALLOW = "allow"
-    DENY = "deny"
 
 
 @dataclass(frozen=True, slots=True)

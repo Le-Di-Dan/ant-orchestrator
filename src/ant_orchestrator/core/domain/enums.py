@@ -131,6 +131,13 @@ class MemoryType(_StrEnum):
     RISK_NOTE = "risk_note"
 
 
+class PolicyDecision(Enum):
+    """Allow/deny outcome of a security or boundary policy check."""
+
+    ALLOW = "allow"
+    DENY = "deny"
+
+
 _TERMINAL_TASK_STATUSES = frozenset(
     {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.REJECTED}
 )
