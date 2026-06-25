@@ -1,6 +1,6 @@
 # ADR-0006: Separate Security Policies from Execution Boundaries
 
-Ngày: 2026-06-24  
+Ngày: 2026-06-24
 Trạng thái: Accepted
 
 ---
