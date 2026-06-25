@@ -109,13 +109,14 @@ class ReservationLedger:
         actual: dict[ResourceKind, int],
     ) -> ConsumptionOutcome:
         res = self._get_active(reservation_id, ReservationStatus.RESERVED)
+        for actual_amt in actual.values():
+            if actual_amt < 0:
+                raise InvariantViolation("Actual amount must be >= 0")
         excess: dict[ResourceKind, int] = {}
         has_overrun = False
         for kind in set(res.amounts) | set(actual):
             reserved_amt = res.amounts.get(kind, 0)
             actual_amt = actual.get(kind, 0)
-            if actual_amt < 0:
-                raise InvariantViolation("Actual amount must be >= 0")
             delta = actual_amt - reserved_amt
             if kind in self._committed:
                 self._committed[kind] += delta

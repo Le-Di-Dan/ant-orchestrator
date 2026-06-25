@@ -154,6 +154,22 @@ class TestConsume:
         with pytest.raises(InvariantViolation):
             led.consume(r.id, {ResourceKind.TOKENS: -1})
 
+    def test_negative_actual_multi_resource_atomic(self) -> None:
+        led = _ledger()
+        r = led.reserve({ResourceKind.TOKENS: 100, ResourceKind.API_CALLS: 5})
+        avail_before = led.available(ResourceKind.TOKENS)
+        with pytest.raises(InvariantViolation):
+            led.consume(r.id, {ResourceKind.TOKENS: 80, ResourceKind.API_CALLS: -1})
+        assert led.get(r.id).status is ReservationStatus.RESERVED
+        assert led.available(ResourceKind.TOKENS) == avail_before
+
+    def test_overrun_blocks_further_reservation(self) -> None:
+        led = _ledger()
+        r = led.reserve({ResourceKind.TOKENS: 1000})
+        led.consume(r.id, {ResourceKind.TOKENS: 1020})
+        with pytest.raises(EnergyBudgetExceededError):
+            led.reserve({ResourceKind.TOKENS: 1})
+
 
 class TestRelease:
     def test_release_reserved(self) -> None:
