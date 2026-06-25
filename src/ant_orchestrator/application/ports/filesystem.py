@@ -8,10 +8,19 @@ contract only expresses intent. Empty content is valid. No real I/O here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from ant_orchestrator.application.ports.tool_common import ToolInvocationMetadata
 from ant_orchestrator.core.domain.errors import InvariantViolation
+
+
+class FileFailureCode(Enum):
+    """Typed failure codes for filesystem boundary errors."""
+
+    OVERSIZED = "oversized"
+    BINARY_CONTENT = "binary_content"
+    INVALID_ENCODING = "invalid_encoding"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,12 +35,25 @@ class FileReadRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ContentRedaction:
+    """A count of redactions for a single pattern type (no secret value stored)."""
+
+    pattern: str
+    count: int
+
+    def __post_init__(self) -> None:
+        if self.count < 1:
+            raise InvariantViolation("ContentRedaction.count must be >= 1")
+
+
+@dataclass(frozen=True, slots=True)
 class FileReadResult:
     """The text read from ``path`` (``content`` may be empty)."""
 
     path: str
     content: str
     invocation: ToolInvocationMetadata
+    redactions: tuple[ContentRedaction, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

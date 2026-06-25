@@ -62,7 +62,7 @@ def test_execution_error_retryable_can_be_overridden() -> None:
 
 def test_constructor_accepts_only_sanitized_kwargs() -> None:
     params = set(inspect.signature(ToolAdapterError.__init__).parameters) - {"self"}
-    assert params <= {"tool", "operation", "retryable"}
+    assert params <= {"tool", "operation", "retryable", "detail_code"}
 
 
 @pytest.mark.parametrize("error_cls", _ALL_CLASSES)
@@ -82,7 +82,7 @@ def test_str_and_repr_are_sanitized(error_cls: type[ToolAdapterError]) -> None:
 def test_no_sensitive_public_state(error_cls: type[ToolAdapterError]) -> None:
     error = error_cls(tool="shell", operation="run")
     # Instance state is only the sanitized identity fields.
-    assert set(vars(error)) == {"tool", "operation", "retryable"}
+    assert set(vars(error)) == {"tool", "operation", "retryable", "detail_code"}
     for attr in _BANNED_ATTRS:
         assert not hasattr(error, attr)
     # Exception args carry only the sanitized summary, no raw data.

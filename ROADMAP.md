@@ -304,7 +304,7 @@ Implement đủ mọi provider; Git write; enforcement bảo mật (Phase 3).
 
 ### Phase 3 — Execution Boundary, Context Package & Energy Enforcement
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
 
 #### Mục tiêu
 Ba cơ chế bảo vệ **kiểm thử được**, hoàn tất **trước** khi có worker thật. Phase gồm ba milestone
@@ -627,3 +627,4 @@ roadmap, chỉ cần PO xác nhận tại thời điểm phù hợp:
 | v1.0 | Khởi tạo Master Roadmap sau khảo sát repository (chưa có source code). 8 phase (0–7), MVP Release Gate 6 chiều, ba tầng tiến hóa. Áp dụng các điều chỉnh review: persistence hai cấp, human approval nền tảng, execution boundary trước worker thật, energy enforcement, context manifest, phân biệt Walking Skeleton/First Real Slice/Full MVP Candidate, tooling Ruff+mypy+pytest, memory MVP tối thiểu deterministic, Phase 3 chia 3A/3B/3C, khóa quyền Documentation Ant, giới hạn vai trò Test Ant, phân biệt Retry/Regroup/Escalate, runtime provider-neutral, Git write ngoài MVP, constants gate hợp lý, cancel/terminal state, evidence dạng artifact có cấu trúc. | Mọi phase `NOT_STARTED`. |
 | v1.1 | Phase 0 chuyển `NOT_STARTED` → `COMPLETED` sau independent closure audit. Evidence: `python -m pip install -e ".[dev]"`, `ant --help`, `ruff check`, `ruff format --check`, `mypy src scripts`, `pytest` (19 passed), `python -m scripts.quality.file_size`, unified gate `python -m scripts.quality.gate` (5/5 PASS) — tất cả exit 0. Chi tiết: `docs/plans/PHASE_0_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 0. | Phase 1–7 giữ `NOT_STARTED`. |
 | v1.2 | Phase 1 chuyển `NOT_STARTED` → `COMPLETED` sau implementation theo `docs/plans/PHASE_1_PLAN.md` (8 checkpoint) + closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 127 passed, smoke test `ant init/status/config show`, AST import-boundary, dependency mới duy nhất `pyyaml`. Chi tiết: `docs/plans/PHASE_1_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 1. | Phase 2–7 giữ `NOT_STARTED`. |
+| v1.3 | Phase 3 chuyển `NOT_STARTED` → `COMPLETED` sau implementation 20 commits (CP0–CP9) + independent closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 974 passed 7 skipped, 22 import-boundary tests PASS, 14 integration tests (8 cases) PASS, R-CP3-2 CLOSED, R-CP3-1 ACCEPTED_MVP_LIMITATION. Branch: `phase/3-execution-boundary`. Chi tiết: `docs/plans/PHASE_3_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 3. | Phase 4–7 giữ `NOT_STARTED`. |

@@ -47,17 +47,22 @@ class ToolAdapterError(AntError):
         tool: str | None = None,
         operation: str | None = None,
         retryable: bool | None = None,
+        detail_code: str | None = None,
     ) -> None:
         self.tool = tool
         self.operation = operation
         self.retryable = self.default_retryable if retryable is None else retryable
+        self.detail_code = detail_code
         super().__init__(self._summary())
 
     def _summary(self) -> str:
-        return (
+        s = (
             f"{self.code.value}(tool={self.tool}, operation={self.operation}, "
-            f"retryable={self.retryable})"
+            f"retryable={self.retryable}"
         )
+        if self.detail_code:
+            s += f", detail={self.detail_code}"
+        return s + ")"
 
     def __str__(self) -> str:
         return self._summary()

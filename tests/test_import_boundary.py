@@ -132,11 +132,25 @@ def test_fake_llm_support_is_provider_free() -> None:
 
 REAL_EXECUTION_LIBS = {"subprocess", "git", "dulwich", "gitpython", "pygit2"}
 
+_SUBPROCESS_ALLOWED = {PKG_ROOT / "execution" / "bounded_shell.py"}
+
 
 def test_no_real_execution_libraries_in_src() -> None:
     for file in PKG_ROOT.rglob("*.py"):
-        leaked = _top_imports(file) & REAL_EXECUTION_LIBS
+        if file in _SUBPROCESS_ALLOWED:
+            leaked = _top_imports(file) & (REAL_EXECUTION_LIBS - {"subprocess"})
+        else:
+            leaked = _top_imports(file) & REAL_EXECUTION_LIBS
         assert not leaked, f"{file} imports a real-execution library {leaked}"
+
+
+def test_subprocess_confined_to_bounded_shell() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        if file in _SUBPROCESS_ALLOWED:
+            continue
+        assert "subprocess" not in _top_imports(file), (
+            f"{file} imports subprocess (only bounded_shell.py may)"
+        )
 
 
 # --- CP6: factory/composition isolation --------------------------------------
@@ -162,3 +176,102 @@ def test_factory_imports_only_allowed_internal_modules() -> None:
             ok = any(module == p or module.startswith(p + ".") for p in allowed)
             assert ok, f"factory imports disallowed internal {module}"
         assert "fake" not in module, f"factory imports a test double: {module}"
+
+
+# --- CP0: security policy purity + audit sink containment (ADR-0006) ----------
+
+
+def test_security_layer_is_pure() -> None:
+    _assert_layer(
+        "security",
+        ("ant_orchestrator.errors", "ant_orchestrator.core.domain", "ant_orchestrator.security"),
+    )
+
+
+def test_execution_layer_dependencies() -> None:
+    """execution/ may import security/ and application ports but not context/energy."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.execution",
+        "ant_orchestrator.security",
+    )
+    for file in _files("execution"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
+
+
+def test_context_layer_dependencies() -> None:
+    """context/ may import application/ports, core, config, security — not execution."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.context",
+        "ant_orchestrator.security",
+    )
+    for file in _files("context"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
+
+
+def test_context_no_subprocess_or_scanning() -> None:
+    """context/ must not import subprocess, glob, os.walk, or scanning APIs."""
+    forbidden = {"subprocess", "glob"}
+    for file in _files("context"):
+        assert not (_top_imports(file) & forbidden), f"{file} imports forbidden module"
+
+
+def test_application_context_port_no_implementation() -> None:
+    """Application context port must not import concrete context/ implementation."""
+    port = PKG_ROOT / "application" / "ports" / "context_builder.py"
+    for module in _imported_modules(port):
+        assert not module.startswith("ant_orchestrator.context"), (
+            f"context_builder port imports implementation {module}"
+        )
+
+
+def test_energy_layer_dependencies() -> None:
+    """energy/ may import application/ports and core — not execution/context/adapters."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.energy",
+    )
+    for file in _files("energy"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
+
+
+def test_application_energy_port_no_implementation() -> None:
+    """Application energy port must not import energy/ implementation."""
+    port = PKG_ROOT / "application" / "ports" / "energy.py"
+    for module in _imported_modules(port):
+        assert not module.startswith("ant_orchestrator.energy"), (
+            f"energy port imports implementation {module}"
+        )
+
+
+def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
+    sink = "ant_orchestrator.adapters.jsonl_audit_sink"
+    outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli")
+    for file in PKG_ROOT.rglob("*.py"):
+        if any(file.is_relative_to(directory) for directory in outer):
+            continue
+        assert sink not in _imported_modules(file), (
+            f"{file} imports the audit sink adapter directly (depend on AuditSink instead)"
+        )
