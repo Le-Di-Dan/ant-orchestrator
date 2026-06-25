@@ -305,6 +305,28 @@ class TestAuditPrivacy:
             for v in event.detail.values():
                 assert "supersecret123" not in v
 
+    def test_pre_audit_failure_prevents_spawn(self, tmp_path: Path) -> None:
+        sentinel = tmp_path / "spawned.txt"
+        code = f'open(r"{sentinel}", "w").write("yes")'
+        s = _script(tmp_path, "sentinel.py", code)
+
+        class _FailOnAllow(FakeAuditSink):
+            def write(self, event: object) -> None:
+                if getattr(event, "decision", None) is PolicyDecision.ALLOW:
+                    raise RuntimeError("audit fail")
+                super().write(event)  # type: ignore[arg-type]
+
+        a, _ = _adapter(tmp_path, audit=_FailOnAllow())
+        with pytest.raises(RuntimeError, match="audit fail"):
+            _run(a, ShellRequest(argv=("python", str(s))))
+        assert not sentinel.exists()
+
+    def test_large_output_bounded_memory(self, tmp_path: Path) -> None:
+        s = _script(tmp_path, "big.py", "import sys; sys.stdout.buffer.write(b'x' * 200000)")
+        a, sink = _adapter(tmp_path, max_output=1024)
+        r = _run(a, ShellRequest(argv=("python", str(s))))
+        assert len(r.stdout.encode()) <= 1024
+
     def test_deny_audit_no_raw_command(self, tmp_path: Path) -> None:
         a, sink = _adapter(tmp_path)
         with pytest.raises(ToolPermissionError):

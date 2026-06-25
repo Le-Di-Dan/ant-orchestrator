@@ -225,7 +225,10 @@ class SubprocessShellAdapter:
         results: list[TruncatedOutput] = [_EMPTY, _EMPTY]
 
         def _read(idx: int, pipe: IO[bytes]) -> None:
-            results[idx] = self._limiter.drain_and_process(pipe)  # type: ignore[arg-type]
+            try:
+                results[idx] = self._limiter.drain_and_process(pipe)  # type: ignore[arg-type]
+            except (OSError, ValueError):
+                pass
 
         threads = [
             threading.Thread(target=_read, args=(0, proc.stdout), daemon=True),
