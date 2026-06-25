@@ -20,6 +20,7 @@ from ant_orchestrator.application.ports.audit import (
     CorrelationId,
 )
 from ant_orchestrator.application.ports.filesystem import (
+    ContentRedaction,
     FileReadRequest,
     FileReadResult,
     FileWriteRequest,
@@ -105,7 +106,9 @@ class BoundedFileSystemAdapter:
         except OSError:
             raise ToolExecutionError(tool=_TOOL, operation="read_text") from None
         if size > self._cfg.max_read_bytes:
-            raise ToolInvalidRequestError(tool=_TOOL, operation="read_text")
+            raise ToolInvalidRequestError(
+                tool=_TOOL, operation="read_text", detail_code="oversized"
+            )
 
         try:
             with resolved.open("rb") as f:
@@ -113,20 +116,30 @@ class BoundedFileSystemAdapter:
         except OSError:
             raise ToolExecutionError(tool=_TOOL, operation="read_text") from None
         if len(raw) > self._cfg.max_read_bytes:
-            raise ToolInvalidRequestError(tool=_TOOL, operation="read_text")
+            raise ToolInvalidRequestError(
+                tool=_TOOL, operation="read_text", detail_code="oversized"
+            )
 
         if b"\x00" in raw:
-            raise ToolInvalidRequestError(tool=_TOOL, operation="read_text")
+            raise ToolInvalidRequestError(
+                tool=_TOOL, operation="read_text", detail_code="binary_content"
+            )
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            raise ToolInvalidRequestError(tool=_TOOL, operation="read_text") from None
+            raise ToolInvalidRequestError(
+                tool=_TOOL, operation="read_text", detail_code="invalid_encoding"
+            ) from None
 
         redacted = self._redactor.redact(text)
+        redactions = tuple(
+            ContentRedaction(pattern=m.pattern.value, count=m.count) for m in redacted.marks
+        )
         return FileReadResult(
             path=req.path,
             content=redacted.text,
             invocation=ToolInvocationMetadata(ToolKind.FILESYSTEM, "read_text"),
+            redactions=redactions,
         )
 
     # ------------------------------------------------------------------

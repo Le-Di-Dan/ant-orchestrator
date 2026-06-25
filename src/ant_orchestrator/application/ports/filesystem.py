@@ -26,12 +26,25 @@ class FileReadRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ContentRedaction:
+    """A count of redactions for a single pattern type (no secret value stored)."""
+
+    pattern: str
+    count: int
+
+    def __post_init__(self) -> None:
+        if self.count < 1:
+            raise InvariantViolation("ContentRedaction.count must be >= 1")
+
+
+@dataclass(frozen=True, slots=True)
 class FileReadResult:
     """The text read from ``path`` (``content`` may be empty)."""
 
     path: str
     content: str
     invocation: ToolInvocationMetadata
+    redactions: tuple[ContentRedaction, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
