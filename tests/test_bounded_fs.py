@@ -62,11 +62,6 @@ def _run_write(a: BoundedFileSystemAdapter, path: str, content: str) -> object:
     )
 
 
-# ------------------------------------------------------------------
-# Read — allowed behavior
-# ------------------------------------------------------------------
-
-
 class TestReadAllowed:
     def test_read_in_scope(self, tmp_path: Path) -> None:
         _touch(tmp_path / "f.txt", "content")
@@ -97,11 +92,6 @@ class TestReadAllowed:
         a, _ = _adapter(tmp_path)
         r = _run_read(a, "cr.txt")
         assert "line1" in r.content
-
-
-# ------------------------------------------------------------------
-# Read — denial
-# ------------------------------------------------------------------
 
 
 class TestReadDenial:
@@ -344,3 +334,15 @@ class TestAuditEvents:
         denies = [e for e in sink.events if e.decision is PolicyDecision.DENY]
         assert len(denies) >= 1
         assert denies[0].event_type is AuditEventType.PATH_DECISION
+
+    def test_pre_read_audit_failure_prevents_open(self, tmp_path: Path) -> None:
+        class _Fail(FakeAuditSink):
+            def write(self, event: object) -> None:
+                if getattr(event, "decision", None) is PolicyDecision.ALLOW:
+                    raise RuntimeError("audit")
+                super().write(event)  # type: ignore[arg-type]
+
+        _touch(tmp_path / "exists.txt", "data")
+        a, _ = _adapter(tmp_path, audit=_Fail())
+        with pytest.raises(RuntimeError):
+            _run_read(a, "exists.txt")
