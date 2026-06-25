@@ -157,6 +157,10 @@ class ReservationLedger:
             raise EnergyReservationError(f"Reservation {reservation_id} not found")
         return self._reservations[reservation_id]
 
+    @property
+    def budget(self) -> EnergyBudget:
+        return self._budget
+
     def available(self, kind: ResourceKind) -> int | None:
         limit = self._budget.limit_for(kind)
         if limit is None:
