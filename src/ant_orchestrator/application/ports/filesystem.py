@@ -8,10 +8,19 @@ contract only expresses intent. Empty content is valid. No real I/O here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from ant_orchestrator.application.ports.tool_common import ToolInvocationMetadata
 from ant_orchestrator.core.domain.errors import InvariantViolation
+
+
+class FileFailureCode(Enum):
+    """Typed failure codes for filesystem boundary errors."""
+
+    OVERSIZED = "oversized"
+    BINARY_CONTENT = "binary_content"
+    INVALID_ENCODING = "invalid_encoding"
 
 
 @dataclass(frozen=True, slots=True)

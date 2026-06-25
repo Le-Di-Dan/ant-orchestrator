@@ -28,6 +28,7 @@ from ant_orchestrator.application.ports.context_builder import (
 )
 from ant_orchestrator.application.ports.filesystem import (
     ContentRedaction,
+    FileFailureCode,
     FileReadRequest,
     FileReadResult,
     FileSystemAdapter,
@@ -248,9 +249,9 @@ def _ineligible(
 
 
 def _map_detail(detail_code: str | None) -> RejectionReason:
-    if detail_code == "binary_content":
+    if detail_code == FileFailureCode.BINARY_CONTENT.value:
         return RejectionReason.BINARY
-    if detail_code == "oversized":
+    if detail_code == FileFailureCode.OVERSIZED.value:
         return RejectionReason.OVERSIZED
     return RejectionReason.INVALID_REQUEST
 

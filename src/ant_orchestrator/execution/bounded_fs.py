@@ -21,6 +21,7 @@ from ant_orchestrator.application.ports.audit import (
 )
 from ant_orchestrator.application.ports.filesystem import (
     ContentRedaction,
+    FileFailureCode,
     FileReadRequest,
     FileReadResult,
     FileWriteRequest,
@@ -107,7 +108,7 @@ class BoundedFileSystemAdapter:
             raise ToolExecutionError(tool=_TOOL, operation="read_text") from None
         if size > self._cfg.max_read_bytes:
             raise ToolInvalidRequestError(
-                tool=_TOOL, operation="read_text", detail_code="oversized"
+                tool=_TOOL, operation="read_text", detail_code=FileFailureCode.OVERSIZED.value
             )
 
         try:
@@ -117,18 +118,20 @@ class BoundedFileSystemAdapter:
             raise ToolExecutionError(tool=_TOOL, operation="read_text") from None
         if len(raw) > self._cfg.max_read_bytes:
             raise ToolInvalidRequestError(
-                tool=_TOOL, operation="read_text", detail_code="oversized"
+                tool=_TOOL, operation="read_text", detail_code=FileFailureCode.OVERSIZED.value
             )
 
         if b"\x00" in raw:
             raise ToolInvalidRequestError(
-                tool=_TOOL, operation="read_text", detail_code="binary_content"
+                tool=_TOOL, operation="read_text", detail_code=FileFailureCode.BINARY_CONTENT.value
             )
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
             raise ToolInvalidRequestError(
-                tool=_TOOL, operation="read_text", detail_code="invalid_encoding"
+                tool=_TOOL,
+                operation="read_text",
+                detail_code=FileFailureCode.INVALID_ENCODING.value,
             ) from None
 
         redacted = self._redactor.redact(text)
