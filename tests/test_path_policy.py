@@ -288,6 +288,41 @@ class TestDeterminism:
         assert d.decision is PolicyDecision.ALLOW
 
 
+class TestDirectoryCheck:
+    def test_existing_directory_allowed(self, tmp_path: Path) -> None:
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        d = _policy(tmp_path, _scope(tmp_path)).check_directory("sub")
+        assert d.decision is PolicyDecision.ALLOW
+        assert d.resolved == sub.resolve()
+
+    def test_file_is_not_directory(self, tmp_path: Path) -> None:
+        _touch(tmp_path / "f.txt")
+        d = _policy(tmp_path, _scope(tmp_path)).check_directory("f.txt")
+        assert d.decision is PolicyDecision.DENY
+        assert d.reason is DenyReason.NOT_A_DIRECTORY
+
+    def test_missing_directory(self, tmp_path: Path) -> None:
+        d = _policy(tmp_path, _scope(tmp_path)).check_directory("nope")
+        assert d.decision is PolicyDecision.DENY
+        assert d.reason is DenyReason.NOT_FOUND
+
+    def test_directory_outside_scope(self, tmp_path: Path) -> None:
+        inner, outer = tmp_path / "inner", tmp_path / "outer"
+        inner.mkdir()
+        outer.mkdir()
+        d = _policy(inner, _scope(inner)).check_directory(str(outer))
+        assert d.decision is PolicyDecision.DENY
+
+    def test_empty_request(self, tmp_path: Path) -> None:
+        d = _policy(tmp_path, _scope(tmp_path)).check_directory("")
+        assert d.reason is DenyReason.INVALID_PATH
+
+    def test_workspace_root_itself(self, tmp_path: Path) -> None:
+        d = _policy(tmp_path, _scope(tmp_path)).check_directory(".")
+        assert d.decision is PolicyDecision.ALLOW
+
+
 # ------------------------------------------------------------------
 # §10.6 Contract invariants
 # ------------------------------------------------------------------

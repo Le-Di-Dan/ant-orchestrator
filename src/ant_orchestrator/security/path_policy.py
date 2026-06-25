@@ -39,6 +39,7 @@ class DenyReason(Enum):
     SYMLINK_ESCAPE = "symlink_escape"
     NOT_FOUND = "not_found"
     NOT_A_FILE = "not_a_file"
+    NOT_A_DIRECTORY = "not_a_directory"
     INVALID_PATH = "invalid_path"
 
 
@@ -98,6 +99,29 @@ class PathPolicy:
     def __init__(self, scope: PathScope, workspace_root: Path) -> None:
         self._scope = scope
         self._ws = workspace_root.resolve()
+
+    def check_directory(self, requested: str) -> PathDecision:
+        """Check whether ``requested`` is an existing directory within read scope."""
+        if not requested:
+            return _deny(DenyReason.INVALID_PATH)
+        try:
+            raw = Path(requested)
+        except (ValueError, TypeError):
+            return _deny(DenyReason.INVALID_PATH)
+        candidate = raw if raw.is_absolute() else self._ws / raw
+        canonical = _safe_resolve(candidate)
+        if canonical is None:
+            return _deny(DenyReason.INVALID_PATH)
+        if not canonical.exists():
+            return _deny(DenyReason.NOT_FOUND)
+        roots = self._scope.read_roots
+        if not _is_within(canonical, roots):
+            return _deny(DenyReason.OUTSIDE_READ_SCOPE)
+        if _is_symlink_escaping(canonical, roots):
+            return _deny(DenyReason.SYMLINK_ESCAPE)
+        if not canonical.is_dir():
+            return _deny(DenyReason.NOT_A_DIRECTORY)
+        return _allow(canonical)
 
     def check(self, requested: str, access: PathAccess) -> PathDecision:
         """Return ALLOW with the canonical path, or DENY with the reason."""
