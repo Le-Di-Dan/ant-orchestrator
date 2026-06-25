@@ -240,6 +240,32 @@ def test_application_context_port_no_implementation() -> None:
         )
 
 
+def test_energy_layer_dependencies() -> None:
+    """energy/ may import application/ports and core — not execution/context/adapters."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.energy",
+    )
+    for file in _files("energy"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
+
+
+def test_application_energy_port_no_implementation() -> None:
+    """Application energy port must not import energy/ implementation."""
+    port = PKG_ROOT / "application" / "ports" / "energy.py"
+    for module in _imported_modules(port):
+        assert not module.startswith("ant_orchestrator.energy"), (
+            f"energy port imports implementation {module}"
+        )
+
+
 def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
     sink = "ant_orchestrator.adapters.jsonl_audit_sink"
     outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli")
