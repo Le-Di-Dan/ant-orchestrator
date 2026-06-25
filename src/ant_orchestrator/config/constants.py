@@ -40,3 +40,12 @@ ALLOWED_ENDPOINT_KEYS: Final = frozenset(
 # ``LLMRequest.timeout_seconds`` (float | None).
 DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
 MAX_TIMEOUT_SECONDS: Final[float] = 600.0
+
+# Execution boundary constants (CP3).
+DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 30.0
+MAX_COMMAND_TIMEOUT_SECONDS: Final[float] = 300.0
+DEFAULT_MAX_OUTPUT_BYTES: Final = 65536
+OUTPUT_TRUNCATION_MARKER: Final = "\n... [OUTPUT TRUNCATED]"
+REDACTION_SAFETY_MARGIN_BYTES: Final = 256
+DRAIN_CHUNK_SIZE: Final = 4096
+PROCESS_KILL_GRACE_SECONDS: Final[float] = 5.0

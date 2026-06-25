@@ -132,11 +132,25 @@ def test_fake_llm_support_is_provider_free() -> None:
 
 REAL_EXECUTION_LIBS = {"subprocess", "git", "dulwich", "gitpython", "pygit2"}
 
+_SUBPROCESS_ALLOWED = {PKG_ROOT / "execution" / "bounded_shell.py"}
+
 
 def test_no_real_execution_libraries_in_src() -> None:
     for file in PKG_ROOT.rglob("*.py"):
-        leaked = _top_imports(file) & REAL_EXECUTION_LIBS
+        if file in _SUBPROCESS_ALLOWED:
+            leaked = _top_imports(file) & (REAL_EXECUTION_LIBS - {"subprocess"})
+        else:
+            leaked = _top_imports(file) & REAL_EXECUTION_LIBS
         assert not leaked, f"{file} imports a real-execution library {leaked}"
+
+
+def test_subprocess_confined_to_bounded_shell() -> None:
+    for file in PKG_ROOT.rglob("*.py"):
+        if file in _SUBPROCESS_ALLOWED:
+            continue
+        assert "subprocess" not in _top_imports(file), (
+            f"{file} imports subprocess (only bounded_shell.py may)"
+        )
 
 
 # --- CP6: factory/composition isolation --------------------------------------
@@ -172,6 +186,24 @@ def test_security_layer_is_pure() -> None:
         "security",
         ("ant_orchestrator.errors", "ant_orchestrator.core.domain", "ant_orchestrator.security"),
     )
+
+
+def test_execution_layer_dependencies() -> None:
+    """execution/ may import security/ and application ports but not context/energy."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.execution",
+        "ant_orchestrator.security",
+    )
+    for file in _files("execution"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
 
 
 def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
