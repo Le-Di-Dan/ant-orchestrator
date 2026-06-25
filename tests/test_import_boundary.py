@@ -206,6 +206,40 @@ def test_execution_layer_dependencies() -> None:
                 assert ok, f"{file} imports disallowed {module}"
 
 
+def test_context_layer_dependencies() -> None:
+    """context/ may import application/ports, core, config, security — not execution."""
+    allowed = (
+        "ant_orchestrator.errors",
+        "ant_orchestrator.core.domain",
+        "ant_orchestrator.core.ports",
+        "ant_orchestrator.application.ports",
+        "ant_orchestrator.config",
+        "ant_orchestrator.context",
+        "ant_orchestrator.security",
+    )
+    for file in _files("context"):
+        for module in _imported_modules(file):
+            if module.startswith("ant_orchestrator"):
+                ok = any(module == p or module.startswith(p + ".") for p in allowed)
+                assert ok, f"{file} imports disallowed {module}"
+
+
+def test_context_no_subprocess_or_scanning() -> None:
+    """context/ must not import subprocess, glob, os.walk, or scanning APIs."""
+    forbidden = {"subprocess", "glob"}
+    for file in _files("context"):
+        assert not (_top_imports(file) & forbidden), f"{file} imports forbidden module"
+
+
+def test_application_context_port_no_implementation() -> None:
+    """Application context port must not import concrete context/ implementation."""
+    port = PKG_ROOT / "application" / "ports" / "context_builder.py"
+    for module in _imported_modules(port):
+        assert not module.startswith("ant_orchestrator.context"), (
+            f"context_builder port imports implementation {module}"
+        )
+
+
 def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
     sink = "ant_orchestrator.adapters.jsonl_audit_sink"
     outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli")
