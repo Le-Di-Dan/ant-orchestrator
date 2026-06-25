@@ -113,6 +113,51 @@ class TestProcessBytes:
         assert r1.truncated == r2.truncated
 
 
+class TestBoundaryRedaction:
+    def test_pem_cross_boundary_header_redacted(self) -> None:
+        """PEM header within retained region but footer beyond → header redacted."""
+        prefix = b"x" * 100
+        pem_header = b"-----BEGIN RSA PRIVATE KEY-----\n"
+        pem_body = b"A" * 1600  # footer well outside retention=200+256=456
+        pem_footer = b"-----END RSA PRIVATE KEY-----\n"
+        data = prefix + pem_header + pem_body + pem_footer
+        r = _limiter(200).process_bytes(data)
+        assert "BEGIN RSA PRIVATE KEY" not in r.text
+
+    def test_pem_complete_within_retention_redacted(self) -> None:
+        """Complete PEM within retention window → primary redaction handles it."""
+        pem = b"-----BEGIN RSA PRIVATE KEY-----\nMIIbody\n-----END RSA PRIVATE KEY-----"
+        data = b"a" * 10 + pem
+        r = _limiter(1024).process_bytes(data)
+        assert "BEGIN RSA PRIVATE KEY" not in r.text
+
+    def test_bearer_token_straddling_limit_redacted(self) -> None:
+        """Bearer token starting before max_bytes boundary → within margin, redacted."""
+        prefix = b"a" * 190
+        token = b"Bearer tokenvalueabcdef12345678"  # starts at 190, within margin
+        data = prefix + token
+        r = _limiter(200).process_bytes(data)
+        assert "tokenvalueabcdef" not in r.text
+
+    def test_api_token_at_max_boundary_redacted(self) -> None:
+        """API token at boundary → captured by safety margin, redacted."""
+        prefix = b"a" * 195
+        token = b"sk-abcdefghijklmnopqrstuv"  # starts at 195 < retention
+        data = prefix + token
+        r = _limiter(200).process_bytes(data)
+        assert "sk-abcdefghijklmnopqrstuv" not in r.text
+
+    def test_pem_cross_boundary_output_within_limit(self) -> None:
+        """After PEM redaction at boundary, output still within max_bytes."""
+        prefix = b"x" * 100
+        pem_header = b"-----BEGIN RSA PRIVATE KEY-----\n"
+        pem_body = b"A" * 1600
+        pem_footer = b"-----END RSA PRIVATE KEY-----\n"
+        data = prefix + pem_header + pem_body + pem_footer
+        r = _limiter(200).process_bytes(data)
+        assert len(r.text.encode("utf-8")) <= 200
+
+
 class TestDrainAndProcess:
     def test_pipe_drain(self) -> None:
         pipe = io.BytesIO(b"pipe content")

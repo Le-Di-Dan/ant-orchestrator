@@ -10,6 +10,7 @@ Does not spawn processes or perform I/O beyond the pipe passed to it.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 from typing import Final
 
@@ -19,10 +20,29 @@ from ant_orchestrator.config.constants import (
     REDACTION_SAFETY_MARGIN_BYTES,
 )
 from ant_orchestrator.core.domain.errors import InvariantViolation
-from ant_orchestrator.security.redaction.redactor import RedactionResult, Redactor
+from ant_orchestrator.security.redaction.redactor import (
+    REDACTION_REPLACEMENT_MARKER,
+    Redactor,
+)
 
 _CHUNK: Final = DRAIN_CHUNK_SIZE
 _MARGIN: Final = REDACTION_SAFETY_MARGIN_BYTES
+
+# PEM headers that require a matching footer — footer can be 1600+ bytes away
+_PEM_HEADER: Final = re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----")
+
+
+def _redact_incomplete_secrets(text: str) -> str:
+    """Redact from any unmatched PEM header to end of string.
+
+    When a PEM header is within the retention window but its footer is
+    beyond it, the full-match regex cannot fire. This conservative pass
+    finds the earliest such header and redacts from there onward.
+    """
+    for m in _PEM_HEADER.finditer(text):
+        if "-----END" not in text[m.start() :]:
+            return text[: m.start()] + REDACTION_REPLACEMENT_MARKER
+    return text
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +83,8 @@ class OutputLimiter:
         retained, total = self._drain(pipe)
         decoded = retained.decode("utf-8", errors="replace")
         result = self._redactor.redact(decoded)
-        return self._truncate(result, total)
+        clean = _redact_incomplete_secrets(result.text)
+        return self._truncate(clean, total)
 
     def process_bytes(self, raw: bytes) -> TruncatedOutput:
         """Process already-collected raw bytes (for testing or pre-drained data)."""
@@ -71,7 +92,8 @@ class OutputLimiter:
         kept = raw[: self._retention]
         decoded = kept.decode("utf-8", errors="replace")
         result = self._redactor.redact(decoded)
-        return self._truncate(result, total)
+        clean = _redact_incomplete_secrets(result.text)
+        return self._truncate(clean, total)
 
     # ------------------------------------------------------------------
 
@@ -88,10 +110,10 @@ class OutputLimiter:
                 buf.extend(chunk[:space])
         return bytes(buf), total
 
-    def _truncate(self, result: RedactionResult, total: int) -> TruncatedOutput:
-        encoded = result.text.encode("utf-8")
+    def _truncate(self, text: str, total: int) -> TruncatedOutput:
+        encoded = text.encode("utf-8")
         if len(encoded) <= self._max:
-            return TruncatedOutput(result.text, truncated=total > self._max, original_bytes=total)
+            return TruncatedOutput(text, truncated=total > self._max, original_bytes=total)
         cut = self._max - len(self._marker.encode("utf-8"))
         safe = encoded[:cut].decode("utf-8", errors="ignore")
         return TruncatedOutput(safe + self._marker, truncated=True, original_bytes=total)
