@@ -55,11 +55,12 @@ class TaskStatus(_StrEnum):
 
 
 class ApprovalStatus(_StrEnum):
-    """State of a human-approval decision (ROADMAP §8/§9)."""
+    """State of a human-approval decision (ROADMAP §8/§9; Phase 4 adds CANCELLED)."""
 
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CANCELLED = "cancelled"
 
     @property
     def is_terminal(self) -> bool:
@@ -138,10 +139,135 @@ class PolicyDecision(Enum):
     DENY = "deny"
 
 
+# ---------------------------------------------------------------------------
+# Phase 4 — workflow / approval-gate / execution enumerations (PHASE_4_PLAN C.2/C.9)
+# ---------------------------------------------------------------------------
+
+
+class WorkflowRunStatus(_StrEnum):
+    """Lifecycle of a WorkflowRun (execution identity; PHASE_4_PLAN D.1)."""
+
+    RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_terminal(self) -> bool:
+        """True for terminal run outcomes."""
+        return self in _TERMINAL_WORKFLOW_RUN_STATUSES
+
+    @property
+    def is_active(self) -> bool:
+        """True while the run holds the single-active-run slot for its task."""
+        return self in _ACTIVE_WORKFLOW_RUN_STATUSES
+
+
+class GateType(_StrEnum):
+    """Kind of decision gate that may require human approval (PHASE_4_PLAN C.8)."""
+
+    SIGNIFICANT_WRITE = "significant_write"
+    UNSAFE_COMMAND = "unsafe_command"
+    ENERGY_BUDGET = "energy_budget"
+    RETRY_LIMIT = "retry_limit"
+    SCOPE_CHANGE = "scope_change"
+
+
+class TransitionSubject(_StrEnum):
+    """Aggregate a StatusTransition row describes (PHASE_4_PLAN B.2)."""
+
+    TASK = "task"
+    RUN = "run"
+    APPROVAL = "approval"
+
+
+class TransitionTrigger(_StrEnum):
+    """What caused a status transition (append-only audit; PHASE_4_PLAN B.2)."""
+
+    RUN_CREATED = "run_created"
+    AWAIT_APPROVAL = "await_approval"
+    APPROVE = "approve"
+    REJECT = "reject"
+    RESUME = "resume"
+    RETRY = "retry"
+    REGROUP = "regroup"
+    CANCEL_REQUEST = "cancel_request"
+    CANCEL = "cancel"
+    COMPLETE = "complete"
+    FAIL = "fail"
+
+
+class ExecutionAttemptStatus(_StrEnum):
+    """Lifecycle of a single ExecutionAttempt (PHASE_4_PLAN C.9; no exactly-once)."""
+
+    PLANNED = "planned"
+    STARTED = "started"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    INDETERMINATE = "indeterminate"
+
+    @property
+    def is_active(self) -> bool:
+        """True while the attempt holds the single-active-attempt slot."""
+        return self in _ACTIVE_EXECUTION_ATTEMPT_STATUSES
+
+    @property
+    def is_terminal(self) -> bool:
+        """True once the attempt has reached a terminal state."""
+        return self in _TERMINAL_EXECUTION_ATTEMPT_STATUSES
+
+
+class ApprovalContinuation(_StrEnum):
+    """Framework-neutral routing intent after an APPROVE decision (PHASE_4_PLAN C.6).
+
+    Only ``workflows/`` maps these to concrete LangGraph node names; the domain and
+    application layers never learn the node names.
+    """
+
+    EXECUTE = "execute"
+    REPLAN = "replan"
+    ACCEPT_RESULT = "accept_result"
+
+
+class ResumeOperationStatus(_StrEnum):
+    """Lifecycle of a resume operation (concurrent-resume guard; PHASE_4_PLAN C.5b)."""
+
+    PENDING = "pending"
+    OWNED = "owned"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RELEASED = "released"
+
+
+class ActorSource(_StrEnum):
+    """Origin of an approval decision actor (PHASE_4_PLAN K — not a verified identity)."""
+
+    LOCAL_CLI = "local_cli"
+
+
 _TERMINAL_TASK_STATUSES = frozenset(
     {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.REJECTED}
 )
-_TERMINAL_APPROVAL_STATUSES = frozenset({ApprovalStatus.APPROVED, ApprovalStatus.REJECTED})
+_TERMINAL_APPROVAL_STATUSES = frozenset(
+    {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.CANCELLED}
+)
 _TERMINAL_WORKER_RUN_STATUSES = frozenset(
     {WorkerRunStatus.SUCCEEDED, WorkerRunStatus.FAILED, WorkerRunStatus.CANCELLED}
+)
+_TERMINAL_WORKFLOW_RUN_STATUSES = frozenset(
+    {WorkflowRunStatus.COMPLETED, WorkflowRunStatus.FAILED, WorkflowRunStatus.CANCELLED}
+)
+_ACTIVE_WORKFLOW_RUN_STATUSES = frozenset(
+    {WorkflowRunStatus.RUNNING, WorkflowRunStatus.AWAITING_APPROVAL}
+)
+_ACTIVE_EXECUTION_ATTEMPT_STATUSES = frozenset(
+    {ExecutionAttemptStatus.PLANNED, ExecutionAttemptStatus.STARTED}
+)
+_TERMINAL_EXECUTION_ATTEMPT_STATUSES = frozenset(
+    {
+        ExecutionAttemptStatus.SUCCEEDED,
+        ExecutionAttemptStatus.FAILED,
+        ExecutionAttemptStatus.INDETERMINATE,
+    }
 )

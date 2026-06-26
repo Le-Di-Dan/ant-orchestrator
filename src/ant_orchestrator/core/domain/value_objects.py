@@ -63,6 +63,29 @@ class MemoryId(Identifier):
     """Identity of a MemoryRecord."""
 
 
+# --- Phase 4 identifiers (PHASE_4_PLAN C.2) ---------------------------------
+
+
+class WorkflowRunId(Identifier):
+    """Identity of a WorkflowRun (execution identity, distinct from TaskId)."""
+
+
+class TransitionId(Identifier):
+    """Identity of an append-only StatusTransition row."""
+
+
+class GateInstanceId(Identifier):
+    """Identity of one decision-gate pause occurrence (deterministic per gate)."""
+
+
+class ResumeOperationId(Identifier):
+    """Identity of a resume operation (concurrent-resume owner lease)."""
+
+
+class ExecutionAttemptId(Identifier):
+    """Identity of a single ExecutionAttempt of a logical action."""
+
+
 @dataclass(frozen=True, slots=True)
 class UtcTimestamp:
     """A timezone-aware timestamp pinned to UTC, serialized as ISO-8601."""

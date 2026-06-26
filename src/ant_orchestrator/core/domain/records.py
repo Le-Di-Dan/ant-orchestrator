@@ -10,8 +10,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 from ant_orchestrator.core.domain.enums import (
+    ActorSource,
     ApprovalStatus,
     ConfidenceLevel,
+    GateType,
     MemoryType,
     PheromoneType,
 )
@@ -24,6 +26,7 @@ from ant_orchestrator.core.domain.value_objects import (
     CheckpointId,
     EnergyUsageId,
     EvidenceId,
+    GateInstanceId,
     HandoffId,
     MemoryId,
     PheromoneId,
@@ -31,6 +34,13 @@ from ant_orchestrator.core.domain.value_objects import (
     TokenCount,
     UtcTimestamp,
     WorkerRunId,
+    WorkflowRunId,
+)
+
+_RESOLVED_APPROVAL_DECISIONS = (
+    ApprovalStatus.APPROVED,
+    ApprovalStatus.REJECTED,
+    ApprovalStatus.CANCELLED,
 )
 
 
@@ -67,7 +77,12 @@ class WorkflowCheckpoint:
 
 @dataclass(frozen=True, slots=True)
 class Approval:
-    """A human-approval decision with a resolve-once lifecycle (D31)."""
+    """A human-approval decision with a resolve-once lifecycle (D31).
+
+    Phase 4 adds optional gate/coordination metadata (PHASE_4_PLAN C.5). All new
+    fields default to ``None``/``1`` so records loaded from a pre-Phase-4 row remain
+    valid; ``approval_row_version`` backs optimistic-concurrency (CAS) updates.
+    """
 
     id: ApprovalId
     task_id: TaskId
@@ -76,6 +91,16 @@ class Approval:
     checkpoint_id: CheckpointId | None = None
     reason: str | None = None
     decided_at: UtcTimestamp | None = None
+    workflow_run_id: WorkflowRunId | None = None
+    gate_type: GateType | None = None
+    gate_instance_id: GateInstanceId | None = None
+    approval_gate_sequence: int | None = None
+    actor_source: ActorSource | None = None
+    actor_label: str | None = None
+    approval_row_version: int = 1
+    langgraph_checkpoint_id: str | None = None
+    langgraph_interrupt_id: str | None = None
+    request_payload: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         pending = self.status is ApprovalStatus.PENDING
@@ -83,6 +108,10 @@ class Approval:
             raise InvariantViolation("Pending approval must not have decided_at")
         if not pending and self.decided_at is None:
             raise InvariantViolation("Resolved approval requires decided_at")
+        if self.approval_row_version < 1:
+            raise InvariantViolation("Approval.approval_row_version must be >= 1")
+        if self.approval_gate_sequence is not None and self.approval_gate_sequence < 0:
+            raise InvariantViolation("Approval.approval_gate_sequence must be >= 0")
 
     def resolve(
         self,
@@ -91,16 +120,21 @@ class Approval:
         decided_at: UtcTimestamp,
         reason: str | None = None,
     ) -> Approval:
-        """Return a resolved copy. Raises if already resolved or decision invalid."""
+        """Return a resolved copy. Raises if already resolved or decision invalid.
+
+        A resolve bumps ``approval_row_version`` so a concurrent stale writer loses
+        the compare-and-set in the persistence layer (PHASE_4_PLAN C.2).
+        """
         if self.status is not ApprovalStatus.PENDING:
             raise ApprovalAlreadyResolved(f"Approval {self.id} already {self.status}")
-        if decision not in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED):
+        if decision not in _RESOLVED_APPROVAL_DECISIONS:
             raise InvariantViolation(f"Cannot resolve with status {decision}")
         return replace(
             self,
             status=decision,
             decided_at=decided_at,
             reason=reason if reason is not None else self.reason,
+            approval_row_version=self.approval_row_version + 1,
         )
 
 

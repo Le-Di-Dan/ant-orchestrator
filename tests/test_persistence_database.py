@@ -66,8 +66,10 @@ def test_newer_version_is_incompatible(tmp_path: Path, clock: FakeClock) -> None
     db_path = tmp_path / "state.sqlite"
     boot = _bootstrapper(clock)
     boot.bootstrap(db_path)
+    # A version strictly newer than CODE_MAX_VERSION (now 2) marks the file as
+    # produced by a newer build than this application supports.
     with sqlite3.connect(str(db_path)) as conn:
-        conn.execute(f"INSERT INTO {MIGRATIONS_TABLE} VALUES (2, '2026-06-22T00:00:00+00:00')")
+        conn.execute(f"INSERT INTO {MIGRATIONS_TABLE} VALUES (3, '2026-06-22T00:00:00+00:00')")
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.SCHEMA_INCOMPATIBLE
     with pytest.raises(SchemaVersionMismatch):
         boot.bootstrap(db_path)
