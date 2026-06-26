@@ -275,3 +275,40 @@ def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
         assert sink not in _imported_modules(file), (
             f"{file} imports the audit sink adapter directly (depend on AuditSink instead)"
         )
+
+
+# --- Phase 4 CP2: framework-free workflow contracts ---------------------------
+
+
+def test_no_langgraph_import_anywhere_in_src() -> None:
+    """CP2 ships framework-neutral contracts only; LangGraph arrives in CP3."""
+    for file in PKG_ROOT.rglob("*.py"):
+        assert "langgraph" not in _top_imports(file), (
+            f"{file} imports langgraph (not allowed in CP2)"
+        )
+
+
+def test_workflows_layer_is_framework_and_infra_free() -> None:
+    """workflows/ must not import LangGraph, persistence, CLI, or adapters in CP2."""
+    forbidden = (
+        "ant_orchestrator.persistence",
+        "ant_orchestrator.cli",
+        "ant_orchestrator.adapters",
+    )
+    for file in _files("workflows"):
+        assert "langgraph" not in _top_imports(file), f"{file} imports langgraph"
+        for module in _imported_modules(file):
+            for bad in forbidden:
+                assert not (module == bad or module.startswith(bad + ".")), (
+                    f"{file} imports disallowed {module}"
+                )
+
+
+def test_core_and_application_free_of_concrete_node_names() -> None:
+    """Concrete LangGraph node names must never leak into core/application code."""
+    node_names = ("execute_stub", "persist_handoff")
+    for layer in ("core", "application"):
+        for file in _files(layer):
+            text = file.read_text(encoding="utf-8")
+            for name in node_names:
+                assert name not in text, f"{file} references concrete node name {name!r}"

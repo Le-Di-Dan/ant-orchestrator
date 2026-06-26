@@ -53,3 +53,11 @@ DEFAULT_MAX_READ_BYTES: Final = 1048576
 
 # Context estimation constants (CP5).
 TOKEN_ESTIMATION_DEFAULT_DIVISOR: Final = 4
+
+# Phase 4 workflow constants (CP2). Schema/topology versions are code constants;
+# the retry/regroup bounds are policy defaults (config-overridable in a later phase).
+GRAPH_STATE_SCHEMA_VERSION: Final = 1
+WORKFLOW_DEFINITION_VERSION: Final = 1
+WORKFLOW_MAX_RETRIES: Final = 2
+WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
+WORKFLOW_MAX_REGROUPS: Final = 1
