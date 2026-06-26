@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from ant_orchestrator.application.errors import ApprovalStateConflict, WorkflowStateError
+from ant_orchestrator.application.errors import ApprovalRuleViolation, ApprovalStateConflict
 from ant_orchestrator.application.ports.workflow_runner import WorkflowRunnerPort
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
@@ -28,6 +28,7 @@ from ant_orchestrator.application.services.workflow_support import (
 )
 from ant_orchestrator.config.constants import RESUME_LEASE_SECONDS
 from ant_orchestrator.core.domain.enums import (
+    ActorSource,
     ApprovalStatus,
     ResumeOperationStatus,
     TaskStatus,
@@ -72,13 +73,37 @@ class ResolveApproval:
         self._clock = clock
         self._ids = ids
 
-    def approve(self, task_id_value: str) -> WorkflowOutcome:
+    def approve(
+        self,
+        task_id_value: str,
+        *,
+        actor_source: ActorSource | None = None,
+        actor_label: str | None = None,
+    ) -> WorkflowOutcome:
         """Approve the pending gate and resume the graph on the approved continuation."""
-        return self._resolve(task_id_value, ApprovalStatus.APPROVED)
+        return self._resolve(
+            task_id_value,
+            ApprovalStatus.APPROVED,
+            actor_source=actor_source,
+            actor_label=actor_label,
+        )
 
-    def reject(self, task_id_value: str, *, reason: str | None = None) -> WorkflowOutcome:
+    def reject(
+        self,
+        task_id_value: str,
+        *,
+        reason: str | None = None,
+        actor_source: ActorSource | None = None,
+        actor_label: str | None = None,
+    ) -> WorkflowOutcome:
         """Reject the pending gate; the graph routes to the terminal rejected node."""
-        return self._resolve(task_id_value, ApprovalStatus.REJECTED, reason=reason)
+        return self._resolve(
+            task_id_value,
+            ApprovalStatus.REJECTED,
+            reason=reason,
+            actor_source=actor_source,
+            actor_label=actor_label,
+        )
 
     # ------------------------------------------------------------------
     # internal
@@ -90,6 +115,8 @@ class ResolveApproval:
         decision: ApprovalStatus,
         *,
         reason: str | None = None,
+        actor_source: ActorSource | None = None,
+        actor_label: str | None = None,
     ) -> WorkflowOutcome:
         task_id = TaskId(task_id_value)
         now = self._clock.now()
@@ -109,16 +136,18 @@ class ResolveApproval:
                 if task.status.is_terminal:
                     # Idempotent: task already terminal (PHASE_4_PLAN MICRO #2).
                     return WorkflowOutcome(status=task.status.value, run_id="")
-                raise WorkflowStateError(f"task {task_id_value} has no active workflow run")
+                raise ApprovalRuleViolation(f"task {task_id_value} has no active workflow run")
             if active_run.status != WorkflowRunStatus.AWAITING_APPROVAL:
-                raise WorkflowStateError(
+                raise ApprovalRuleViolation(
                     f"run {active_run.id.value} is {active_run.status.value}, "
                     "expected awaiting_approval"
                 )
 
             approval = uow.approvals.find_pending_by_run(active_run.id)
             if approval is None:
-                raise WorkflowStateError(f"no pending approval found for run {active_run.id.value}")
+                raise ApprovalRuleViolation(
+                    f"no pending approval found for run {active_run.id.value}"
+                )
 
             existing_op = uow.resume_operations.find_by_approval(approval.id)
             run_id_captured = active_run.id
@@ -155,7 +184,13 @@ class ResolveApproval:
                 )
                 uow.resume_operations.add(resume_op)
 
-                resolved = approval.resolve(decision, decided_at=now, reason=reason)
+                resolved = approval.resolve(
+                    decision,
+                    decided_at=now,
+                    reason=reason,
+                    actor_source=actor_source,
+                    actor_label=actor_label,
+                )
                 ok = uow.approvals.resolve_with_version(
                     resolved, expected_version=approval.approval_row_version
                 )

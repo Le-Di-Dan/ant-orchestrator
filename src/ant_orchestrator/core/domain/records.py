@@ -119,11 +119,15 @@ class Approval:
         *,
         decided_at: UtcTimestamp,
         reason: str | None = None,
+        actor_source: ActorSource | None = None,
+        actor_label: str | None = None,
     ) -> Approval:
         """Return a resolved copy. Raises if already resolved or decision invalid.
 
         A resolve bumps ``approval_row_version`` so a concurrent stale writer loses
-        the compare-and-set in the persistence layer (PHASE_4_PLAN C.2).
+        the compare-and-set in the persistence layer (PHASE_4_PLAN C.2). Actor
+        metadata records *who* decided (origin + optional label); it is not a
+        verified identity (PHASE_4_PLAN K).
         """
         if self.status is not ApprovalStatus.PENDING:
             raise ApprovalAlreadyResolved(f"Approval {self.id} already {self.status}")
@@ -134,6 +138,8 @@ class Approval:
             status=decision,
             decided_at=decided_at,
             reason=reason if reason is not None else self.reason,
+            actor_source=actor_source if actor_source is not None else self.actor_source,
+            actor_label=actor_label if actor_label is not None else self.actor_label,
             approval_row_version=self.approval_row_version + 1,
         )
 

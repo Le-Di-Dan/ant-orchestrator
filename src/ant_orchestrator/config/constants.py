@@ -74,3 +74,9 @@ COMPLETION_OPERATION_PREFIX: Final = "complete-"
 # CP6 — non-terminal status string for RUNNING cancellation (not a TaskStatus enum).
 CANCEL_REQUESTED_STATUS: Final = "cancel_requested"
 CANCEL_REQUEST_OPERATION_PREFIX: Final = "cancel-request-"
+# CP7 — version stamped into every Phase 4 ``--json`` CLI payload (single source).
+CLI_JSON_SCHEMA_VERSION: Final = 1
+# CP7 — ``ant status`` shows at most this many most-recent tasks (no pagination yet).
+STATUS_RECENT_TASK_LIMIT: Final = 50
+# CP7 — a rejection reason is sanitized and bounded to this many characters.
+MAX_REJECT_REASON_CHARS: Final = 500

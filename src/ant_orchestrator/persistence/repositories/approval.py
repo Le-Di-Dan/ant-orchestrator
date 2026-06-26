@@ -99,11 +99,14 @@ class ApprovalRepository(ConnRepository):
     def resolve(self, approval: Approval) -> None:
         cursor = self._conn.execute(
             "UPDATE approvals SET status = ?, reason = ?, decided_at = ?, "
-            "approval_row_version = ? WHERE id = ? AND status = ?",
+            "actor_source = ?, actor_label = ?, approval_row_version = ? "
+            "WHERE id = ? AND status = ?",
             (
                 approval.status.value,
                 approval.reason,
                 iso_or_none(approval.decided_at),
+                approval.actor_source.value if approval.actor_source is not None else None,
+                approval.actor_label,
                 approval.approval_row_version,
                 approval.id.value,
                 ApprovalStatus.PENDING.value,
@@ -116,11 +119,14 @@ class ApprovalRepository(ConnRepository):
         """CAS resolve: only succeeds if the stored row is pending at ``expected_version``."""
         cursor = self._conn.execute(
             "UPDATE approvals SET status = ?, reason = ?, decided_at = ?, "
-            "approval_row_version = ? WHERE id = ? AND status = ? AND approval_row_version = ?",
+            "actor_source = ?, actor_label = ?, approval_row_version = ? "
+            "WHERE id = ? AND status = ? AND approval_row_version = ?",
             (
                 approval.status.value,
                 approval.reason,
                 iso_or_none(approval.decided_at),
+                approval.actor_source.value if approval.actor_source is not None else None,
+                approval.actor_label,
                 approval.approval_row_version,
                 approval.id.value,
                 ApprovalStatus.PENDING.value,
