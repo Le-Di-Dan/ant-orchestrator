@@ -14,6 +14,11 @@ dependencies = [
     # LLM gateway (ADR-0003). Narrow range: tested on 1.89.3; LiteLLM may break on
     # minor bumps, so cap below the next minor to avoid untested releases.
     "litellm>=1.89.3,<1.90",
+    # Workflow engine + durable checkpointer (Phase 4 CP3). Tested on langgraph
+    # 1.2.6 / checkpoint-sqlite 3.1.0; capped below the next minor/major to avoid
+    # untested releases. Used only in workflows/ (see import-boundary tests).
+    "langgraph>=1.2.6,<1.3",
+    "langgraph-checkpoint-sqlite>=3.0.1,<4",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +65,13 @@ no_implicit_reexport = true
 # untyped boundary (seam/error-mapping modules only). Does not relax our code.
 [[tool.mypy.overrides]]
 module = ["litellm", "litellm.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# LangGraph + LangChain re-exports are an untyped boundary for strict checkers; treat
+# them as such (confined to workflows/ wiring). Does not relax our own code.
+[[tool.mypy.overrides]]
+module = ["langgraph", "langgraph.*", "langchain_core", "langchain_core.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

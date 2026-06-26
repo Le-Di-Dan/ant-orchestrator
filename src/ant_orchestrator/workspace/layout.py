@@ -7,6 +7,9 @@ from typing import Final
 ANT_DIRNAME: Final = ".ant"
 MARKER_FILENAME: Final = "workspace.json"
 DATABASE_FILENAME: Final = "state.sqlite"
+# LangGraph durable checkpointer DB — a separate file from state.sqlite (Phase 4
+# CP3); its schema is owned by LangGraph, never by the v2 migration/EXPECTED_SCHEMA.
+CHECKPOINT_DB_FILENAME: Final = "checkpoints.sqlite"
 GITIGNORE_FILENAME: Final = ".gitignore"
 
 WORKSPACE_FORMAT_VERSION: Final = 1
@@ -29,6 +32,9 @@ GITIGNORE_LINES: Final = (
     DATABASE_FILENAME,
     f"{DATABASE_FILENAME}-wal",
     f"{DATABASE_FILENAME}-shm",
+    CHECKPOINT_DB_FILENAME,
+    f"{CHECKPOINT_DB_FILENAME}-wal",
+    f"{CHECKPOINT_DB_FILENAME}-shm",
     "memory/",
     "pheromones/",
     "handoff/",

@@ -277,26 +277,40 @@ def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
         )
 
 
-# --- Phase 4 CP2: framework-free workflow contracts ---------------------------
+# --- Phase 4 CP2/CP3: workflow contracts + LangGraph confinement ---------------
+
+# Only these workflow wiring modules may import LangGraph (CP3).
+_LANGGRAPH_ALLOWED = {
+    PKG_ROOT / "workflows" / "graph.py",
+    PKG_ROOT / "workflows" / "checkpointer.py",
+    PKG_ROOT / "workflows" / "runner.py",
+}
+
+# Pure CP2 modules must stay framework-neutral even as CP3 adds wiring beside them.
+_PURE_WORKFLOW_MODULES = ("state.py", "intent.py", "routing.py", "decision_gate.py", "nodes.py")
 
 
-def test_no_langgraph_import_anywhere_in_src() -> None:
-    """CP2 ships framework-neutral contracts only; LangGraph arrives in CP3."""
+def test_langgraph_confined_to_workflow_wiring() -> None:
+    """`langgraph` may be imported only by the workflow wiring modules (CP3)."""
     for file in PKG_ROOT.rglob("*.py"):
-        assert "langgraph" not in _top_imports(file), (
-            f"{file} imports langgraph (not allowed in CP2)"
-        )
+        if "langgraph" in _top_imports(file):
+            assert file in _LANGGRAPH_ALLOWED, f"{file} imports langgraph outside workflow wiring"
 
 
-def test_workflows_layer_is_framework_and_infra_free() -> None:
-    """workflows/ must not import LangGraph, persistence, CLI, or adapters in CP2."""
+def test_pure_workflow_modules_stay_framework_free() -> None:
+    for name in _PURE_WORKFLOW_MODULES:
+        file = PKG_ROOT / "workflows" / name
+        assert "langgraph" not in _top_imports(file), f"{file} must stay framework-free"
+
+
+def test_workflows_layer_does_not_import_persistence_or_cli() -> None:
+    """workflows/ must not import persistence, CLI, or concrete adapters."""
     forbidden = (
         "ant_orchestrator.persistence",
         "ant_orchestrator.cli",
         "ant_orchestrator.adapters",
     )
     for file in _files("workflows"):
-        assert "langgraph" not in _top_imports(file), f"{file} imports langgraph"
         for module in _imported_modules(file):
             for bad in forbidden:
                 assert not (module == bad or module.startswith(bad + ".")), (
