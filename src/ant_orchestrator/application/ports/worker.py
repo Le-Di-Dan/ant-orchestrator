@@ -7,6 +7,7 @@ Phase 4 ships only stub adapters; real side effects come in a later phase.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -48,6 +49,31 @@ class WorkerActionIntent:
             raise InvariantViolation("WorkerActionIntent.logical_action_id must be non-empty")
         if len(self.summary) > MAX_WORKER_DETAIL_CHARS:
             raise InvariantViolation("WorkerActionIntent.summary exceeds the bound")
+
+    def to_state_dict(self) -> dict[str, object]:
+        """Render as a JSON-safe dict for inclusion in graph state (no behaviour text)."""
+        return {
+            "logical_action_id": self.logical_action_id,
+            "summary": self.summary,
+            "requires_significant_write": self.requires_significant_write,
+            "requires_unsafe_command": self.requires_unsafe_command,
+            "target_paths": list(self.target_paths),
+            "command_argv": list(self.command_argv),
+        }
+
+    @classmethod
+    def from_state_dict(cls, data: Mapping[str, object], *, default_id: str) -> WorkerActionIntent:
+        """Rebuild a structured intent from a JSON-safe graph-state dict."""
+        _tgt = data.get("target_paths")
+        _cmd = data.get("command_argv")
+        return cls(
+            logical_action_id=str(data.get("logical_action_id") or default_id),
+            summary=str(data.get("summary") or "stub action"),
+            requires_significant_write=bool(data.get("requires_significant_write", False)),
+            requires_unsafe_command=bool(data.get("requires_unsafe_command", False)),
+            target_paths=tuple(str(p) for p in (_tgt if isinstance(_tgt, (list, tuple)) else ())),
+            command_argv=tuple(str(a) for a in (_cmd if isinstance(_cmd, (list, tuple)) else ())),
+        )
 
 
 @dataclass(frozen=True, slots=True)

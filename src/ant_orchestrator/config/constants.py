@@ -57,7 +57,16 @@ TOKEN_ESTIMATION_DEFAULT_DIVISOR: Final = 4
 # Phase 4 workflow constants (CP2). Schema/topology versions are code constants;
 # the retry/regroup bounds are policy defaults (config-overridable in a later phase).
 GRAPH_STATE_SCHEMA_VERSION: Final = 1
-WORKFLOW_DEFINITION_VERSION: Final = 1
+# Bumped to 2 in CP4: the topology gained the approval-interrupt path (prepare_intent
+# / await_approval / rejected / cancelled) and dropped the gate_blocked placeholder.
+WORKFLOW_DEFINITION_VERSION: Final = 2
 WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
 WORKFLOW_MAX_REGROUPS: Final = 1
+
+# CP4 coordination constants. The resume lease bounds how long a single owner may
+# hold the right to drive a graph resume before a recovery may reclaim it.
+RESUME_LEASE_SECONDS: Final = 300
+# Deterministic operation-id prefixes (idempotency keys for status transitions).
+PAUSE_OPERATION_PREFIX: Final = "pause-"
+COMPLETION_OPERATION_PREFIX: Final = "complete-"
