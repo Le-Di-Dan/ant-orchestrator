@@ -14,8 +14,11 @@ from collections.abc import Mapping
 from ant_orchestrator.application.ports.worker import WorkerActionIntent, WorkerOutcome
 from ant_orchestrator.core.domain.enums import ApprovalContinuation, GateType
 from ant_orchestrator.workflows.routing import (
+    GrantDecision,
     RegroupDecision,
     RetryDecision,
+    effective_retry_limit,
+    grant_retry_extension,
     route_regroup,
     route_retry,
 )
@@ -147,6 +150,53 @@ def route_after_approval(intent: Mapping[str, object], decision: str) -> str:
         return PHASE_CANCELLED
     continuation = ApprovalContinuation(str(intent.get("approved_continuation")))
     return _CONTINUATION_PHASE[continuation]
+
+
+def build_escalation_payload(
+    state: Mapping[str, object], gate_type: GateType, reason: str
+) -> dict[str, object]:
+    """Build a sanitized payload with diagnostic counters for an escalation gate."""
+    payload: dict[str, object] = {"reason": reason}
+    if gate_type is GateType.RETRY_LIMIT:
+        payload["retry_count"] = as_int(state.get("retry_count"))
+        payload["effective_retry_limit"] = effective_retry_limit(
+            as_int(state.get("base_retry_limit")),
+            as_int(state.get("retry_extension_count")),
+        )
+    elif gate_type is GateType.SCOPE_CHANGE:
+        payload["regroup_count"] = as_int(state.get("regroup_count"))
+    return payload
+
+
+def apply_approval_delta(
+    intent: Mapping[str, object],
+    decision: str,
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Full delta after an approval decision: phase + RetryGrant when RETRY_LIMIT approved.
+
+    REJECT/CANCEL route to fixed terminal phases. APPROVE follows the continuation
+    from the intent; a RETRY_LIMIT approval triggers a one-time extension grant
+    (fail-closed if the MAX_RETRY_EXTENSIONS bound is already reached).
+    """
+    if decision == RESUME_REJECTED:
+        return {"phase": PHASE_REJECTED}
+    if decision == RESUME_CANCELLED:
+        return {"phase": PHASE_CANCELLED}
+    continuation = ApprovalContinuation(str(intent.get("approved_continuation")))
+    delta: dict[str, object] = {"phase": _CONTINUATION_PHASE[continuation]}
+    if (
+        intent.get("gate_type") == GateType.RETRY_LIMIT.value
+        and continuation is ApprovalContinuation.EXECUTE
+    ):
+        result = grant_retry_extension(
+            retry_extension_count=as_int(state.get("retry_extension_count"))
+        )
+        if result.decision is GrantDecision.GRANTED:
+            delta["retry_extension_count"] = result.retry_extension_count
+        else:
+            delta["phase"] = PHASE_FAILED
+    return delta
 
 
 def _regroup_or_escalate(state: Mapping[str, object]) -> dict[str, object]:

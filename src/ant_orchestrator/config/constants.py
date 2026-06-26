@@ -64,9 +64,10 @@ WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
 WORKFLOW_MAX_REGROUPS: Final = 1
 
-# CP4 coordination constants. The resume lease bounds how long a single owner may
-# hold the right to drive a graph resume before a recovery may reclaim it.
+# CP4/CP5 coordination constants. Lease durations bound how long an owner may hold
+# the right to drive a graph operation before recovery may reclaim it.
 RESUME_LEASE_SECONDS: Final = 300
+EXECUTION_ATTEMPT_LEASE_SECONDS: Final = 300
 # Deterministic operation-id prefixes (idempotency keys for status transitions).
 PAUSE_OPERATION_PREFIX: Final = "pause-"
 COMPLETION_OPERATION_PREFIX: Final = "complete-"

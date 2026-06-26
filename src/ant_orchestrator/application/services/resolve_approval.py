@@ -5,7 +5,7 @@ UoW ordering (all in one transaction — PHASE_4_PLAN MICRO #3/PATCH #5):
   → resolve Approval (row_version CAS) → WorkflowRun→RUNNING → Task→RUNNING
   → append run/task/approval transitions → commit
   → (only owner) runner.resume({interrupt_id: decision})
-  → CompletionFinalizer (idempotent, crash #7-safe).
+  → CompletionFinalizer (END reached) or PauseFinalizer (graph interrupted again).
 
 Idempotent retry (PHASE_4_PLAN MICRO #2):
   ResumeOperation already COMPLETED  → return terminal outcome without re-resuming.
@@ -20,6 +20,7 @@ from datetime import timedelta
 from ant_orchestrator.application.errors import ApprovalStateConflict, WorkflowStateError
 from ant_orchestrator.application.ports.workflow_runner import WorkflowRunnerPort
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
+from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
 from ant_orchestrator.application.services.workflow_support import (
     UnitOfWorkFactory,
     WorkflowOutcome,
@@ -43,6 +44,7 @@ from ant_orchestrator.core.domain.value_objects import (
 from ant_orchestrator.core.domain.workflow import ResumeOperation
 from ant_orchestrator.core.ports.clock import Clock
 from ant_orchestrator.core.ports.ids import IdGenerator
+from ant_orchestrator.core.ports.unit_of_work import UnitOfWorkRepositories
 
 _DECISION_TRIGGER: dict[ApprovalStatus, TransitionTrigger] = {
     ApprovalStatus.APPROVED: TransitionTrigger.APPROVE,
@@ -58,6 +60,7 @@ class ResolveApproval:
         runner: WorkflowRunnerPort,
         uow_factory: UnitOfWorkFactory,
         completion_finalizer: CompletionFinalizer,
+        pause_finalizer: PauseFinalizer,
         *,
         clock: Clock,
         ids: IdGenerator,
@@ -65,6 +68,7 @@ class ResolveApproval:
         self._runner = runner
         self._uow_factory = uow_factory
         self._completion_finalizer = completion_finalizer
+        self._pause_finalizer = pause_finalizer
         self._clock = clock
         self._ids = ids
 
@@ -205,12 +209,40 @@ class ResolveApproval:
             interrupt_id=interrupt_id,
             decision=decision.value,
         )
+        if result.interrupt is not None:
+            # Graph interrupted again (e.g. RetryGrant → more executes → new gate).
+            approval_id = self._pause_finalizer.finalize(
+                run_id_captured, result.interrupt, checkpoint_id=result.checkpoint_id
+            )
+            self._settle_resume_op(op_id)
+            return WorkflowOutcome(
+                status=TaskStatus.WAITING_FOR_APPROVAL.value,
+                run_id=run_id_captured.value,
+                approval_id=approval_id,
+                resume_operation_id=op_id,
+            )
         return self._completion_finalizer.finalize(
             run_id_captured,
             final_outcome=result.final_outcome,
             checkpoint_id=result.checkpoint_id,
             resume_operation_id=op_id,
         )
+
+    def _settle_resume_op(self, resume_operation_id: str) -> None:
+        """Mark a ResumeOperation COMPLETED in a dedicated UoW."""
+        now = self._clock.now()
+        with self._uow_factory() as uow:
+            self._settle_op(uow, resume_operation_id, now)
+
+    @staticmethod
+    def _settle_op(
+        uow: UnitOfWorkRepositories, resume_operation_id: str, now: UtcTimestamp
+    ) -> None:
+        op = uow.resume_operations.get(ResumeOperationId(resume_operation_id))
+        if op.status is not ResumeOperationStatus.COMPLETED:
+            uow.resume_operations.update(
+                op.with_status(ResumeOperationStatus.COMPLETED, completed_at=now)
+            )
 
     def _fetch_outcome(self, run_id: WorkflowRunId, *, resume_operation_id: str) -> WorkflowOutcome:
         """Return the current task status without driving the graph (non-owner / idempotent)."""

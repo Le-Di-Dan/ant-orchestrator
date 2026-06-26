@@ -83,7 +83,7 @@ def build_services(
     pause = PauseFinalizer(uow_f, clock=clock, ids=ids)
     complete = CompletionFinalizer(uow_f, clock=clock, ids=ids)
     run_svc = RunWorkflow(runner, uow_f, pause, complete, clock=clock, ids=ids)
-    resolve_svc = ResolveApproval(runner, uow_f, complete, clock=clock, ids=ids)
+    resolve_svc = ResolveApproval(runner, uow_f, complete, pause, clock=clock, ids=ids)
     reconciler = Reconciler(runner, uow_f, pause, complete)
     return run_svc, resolve_svc, reconciler, pause, complete
 

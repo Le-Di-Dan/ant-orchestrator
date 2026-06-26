@@ -15,6 +15,7 @@ from langgraph.types import interrupt
 
 from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
+from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 from ant_orchestrator.workflows.decision_gate import DecisionGateOutcome, DecisionGatePolicy
 from ant_orchestrator.workflows.graph_support import (
     PHASE_AWAIT_APPROVAL,
@@ -28,13 +29,14 @@ from ant_orchestrator.workflows.graph_support import (
     PHASE_REJECTED,
     PHASE_REVIEW,
     PHASE_VALIDATE,
+    apply_approval_delta,
+    build_escalation_payload,
     intent_from_state,
     intent_to_state,
     last_outcome,
     mark_pending_gate,
     phase_of,
     read_pending_gate,
-    route_after_approval,
     route_after_review,
     route_after_validation,
     status_of,
@@ -83,8 +85,12 @@ def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, o
         delta["action_intent"] = action_intent
 
 
-def build_workflow_graph(worker: WorkerExecutionPort, policy: DecisionGatePolicy) -> StateGraph:
-    """Build (but do not compile) the CP4 graph with the approval interrupt path."""
+def build_workflow_graph(
+    worker: WorkerExecutionPort,
+    policy: DecisionGatePolicy,
+    attempt_orchestrator: AttemptOrchestrator | None = None,
+) -> StateGraph:
+    """Build (but do not compile) the CP5 graph with attempt orchestration and RetryGrant."""
 
     def decision(state: GraphState) -> dict[str, object]:
         intent = intent_from_state(state)
@@ -106,12 +112,23 @@ def build_workflow_graph(worker: WorkerExecutionPort, policy: DecisionGatePolicy
 
     def execute_stub(state: GraphState) -> dict[str, object]:
         intent = intent_from_state(state)
+        run_id = str(state.get("workflow_run_id", ""))
+        attempt_id: str | None = None
+        if attempt_orchestrator is not None:
+            attempt_id = attempt_orchestrator.before_execute(run_id, intent.logical_action_id)
         result = worker.execute(intent)
+        if attempt_orchestrator is not None and attempt_id is not None:
+            attempt_orchestrator.after_execute(attempt_id, result.outcome)
         action_intent = dict(state.get("action_intent") or {})
         action_intent[_OUTCOME_KEY] = result.outcome.value
         evidence = list(state.get("evidence_refs") or [])
         evidence.extend(result.evidence_refs)
-        return {"action_intent": action_intent, "evidence_refs": evidence, "phase": PHASE_VALIDATE}
+        return {
+            "action_intent": action_intent,
+            "evidence_refs": evidence,
+            "phase": PHASE_VALIDATE,
+            "execution_attempt_ref": attempt_id,
+        }
 
     def validate(state: GraphState) -> dict[str, object]:
         delta = dict(evaluate_validation(state, last_outcome(state)))
@@ -130,12 +147,13 @@ def build_workflow_graph(worker: WorkerExecutionPort, policy: DecisionGatePolicy
         logical_action_id = str(
             action_intent.get("logical_action_id") or f"{state.get('task_id', '')}-act"
         )
+        payload = build_escalation_payload(state, gate_type, reason)
         delta = dict(
             prepare_approval_intent(
                 state,
                 gate_type=gate_type,
                 logical_action_id=logical_action_id,
-                payload={"reason": reason},
+                payload=payload,
                 approved_continuation=continuation,
             )
         )
@@ -145,10 +163,11 @@ def build_workflow_graph(worker: WorkerExecutionPort, policy: DecisionGatePolicy
     def await_approval(state: GraphState) -> dict[str, object]:
         intent = dict(state.get("approval_intent") or {})
         decision_token = str(interrupt(intent))
-        return {
-            "approval_decision": {"decision": decision_token},
-            "phase": route_after_approval(intent, decision_token),
-        }
+        delta = apply_approval_delta(intent, decision_token, state)
+        delta["approval_decision"] = {"decision": decision_token}
+        # Clear approval_intent so the next prepare_intent treats it as a new occurrence.
+        delta["approval_intent"] = None
+        return delta
 
     graph = StateGraph(GraphState)
     graph.add_node(NODE_PLAN, plan_node)
@@ -193,6 +212,7 @@ def _wire_edges(graph: StateGraph) -> None:
             PHASE_PERSIST: NODE_PERSIST,
             PHASE_REJECTED: NODE_REJECTED,
             PHASE_CANCELLED: NODE_CANCELLED,
+            PHASE_FAILED: NODE_FAILED,  # RetryGrant bound fail-closed
         },
     )
     graph.add_edge(NODE_EXECUTE, NODE_VALIDATE)
