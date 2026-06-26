@@ -16,6 +16,7 @@ from ant_orchestrator.application.ports.database import (
 )
 from ant_orchestrator.core.ports.clock import Clock
 from ant_orchestrator.persistence.database import Database
+from ant_orchestrator.persistence.migration_v2 import SqliteDatabaseMigrator
 from ant_orchestrator.persistence.schema import (
     CODE_MAX_VERSION,
     EXPECTED_SCHEMA,
@@ -88,17 +89,30 @@ class SqliteDatabaseInspector:
 
 
 class SqliteDatabaseBootstrapper:
-    """Creates schema v1 in a fresh database file (implements DatabaseBootstrapper)."""
+    """Brings a database file to the current schema (implements DatabaseBootstrapper).
+
+    Fresh files are created directly at the current version; an older (v1) file is
+    upgraded in place via the v1->v2 migration; a file already at the current version
+    is a verified no-op. The upgrade runs on its own connection after the inspection
+    transaction closes (the migration toggles ``PRAGMA foreign_keys`` and manages its
+    own transaction).
+    """
 
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
+        self._migrator = SqliteDatabaseMigrator(clock)
 
     def bootstrap(self, db_path: Path) -> None:
+        if self._inspect_for_bootstrap(db_path):
+            self._migrator.migrate(db_path)
+
+    def _inspect_for_bootstrap(self, db_path: Path) -> bool:
+        """Create a fresh schema if empty; return True iff an upgrade is required."""
         with Database(db_path).transaction() as conn:
             tables = _table_names(conn)
             if not tables:
                 self._create_schema(conn)
-                return
+                return False
             if MIGRATIONS_TABLE not in tables:
                 raise StorageIntegrityError("database has tables but no schema_migrations")
             version = _max_version(conn)
@@ -106,9 +120,11 @@ class SqliteDatabaseBootstrapper:
                 raise StorageIntegrityError("schema_migrations is empty")
             if version > CODE_MAX_VERSION:
                 raise SchemaVersionMismatch(f"db version {version} > {CODE_MAX_VERSION}")
+            if version < CODE_MAX_VERSION:
+                return True  # upgrade after this transaction closes
             if not _schema_is_complete(conn, tables):
                 raise StorageIntegrityError("database schema is incomplete")
-            # Already at the supported version and complete: idempotent no-op.
+            return False  # already current and complete: idempotent no-op
 
     def _create_schema(self, conn: sqlite3.Connection) -> None:
         for ddl in TABLE_DDL:

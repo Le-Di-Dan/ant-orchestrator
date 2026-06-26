@@ -30,6 +30,30 @@ _V1_VERSION = 1
 _APPROVAL_LEGACY_COLUMNS = "id, task_id, checkpoint_id, status, reason, requested_at, decided_at"
 # idx_appr_task is dropped with the legacy approvals table and must be recreated.
 _APPROVALS_TASK_INDEX = "CREATE INDEX idx_appr_task ON approvals(task_id)"
+# A genuine v1 database must contain every v1 table before it can be migrated; a
+# partial/incomplete file is reported as corrupted rather than blindly rebuilt.
+_V1_TABLE_NAMES = frozenset(
+    {
+        MIGRATIONS_TABLE,
+        "tasks",
+        "worker_runs",
+        "energy_usage",
+        "workflow_checkpoints",
+        "approvals",
+        "execution_evidence",
+        "handoff_records",
+        "pheromones",
+        "memory_records",
+    }
+)
+
+
+def _require_v1_tables(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    existing = {str(row[0]) for row in rows}
+    missing = _V1_TABLE_NAMES - existing
+    if missing:
+        raise StorageIntegrityError(f"incomplete v1 schema; missing tables {sorted(missing)}")
 
 
 def _max_version(conn: sqlite3.Connection) -> int | None:
@@ -87,6 +111,7 @@ class SqliteDatabaseMigrator:
             return  # already at v2: idempotent no-op
         if version != _V1_VERSION:
             raise SchemaVersionMismatch(f"cannot migrate from version {version} to v2")
+        _require_v1_tables(conn)
         conn.execute("PRAGMA foreign_keys = OFF")
         conn.execute("BEGIN")
         try:
