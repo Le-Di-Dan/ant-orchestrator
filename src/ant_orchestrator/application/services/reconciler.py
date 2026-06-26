@@ -15,6 +15,7 @@ persists business state that should already have been written.
 
 from __future__ import annotations
 
+from ant_orchestrator.application.errors import CheckpointRecoveryError
 from ant_orchestrator.application.ports.workflow_runner import WorkflowRunnerPort
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
@@ -72,7 +73,14 @@ class Reconciler:
                 checkpoint_id=summary.checkpoint_id,
             )
 
-        return None
+        # No clear snapshot: distinguish initial invoke not done from lost checkpoint.
+        if run.checkpoint_ever_observed:
+            raise CheckpointRecoveryError(
+                f"run {run_id.value}: checkpoint was observed but snapshot state is unclear "
+                "(Scenario H — manual recovery required)"
+            )
+
+        return None  # No checkpoint observed: initial invoke not done; caller re-invokes.
 
     def reconcile_task(self, task_id_value: str) -> WorkflowOutcome | None:
         """Reconcile the active run for a task (if any). Returns outcome or None."""

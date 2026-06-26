@@ -16,6 +16,7 @@ from langgraph.types import interrupt
 from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
+from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
 from ant_orchestrator.workflows.decision_gate import DecisionGateOutcome, DecisionGatePolicy
 from ant_orchestrator.workflows.graph_support import (
     PHASE_AWAIT_APPROVAL,
@@ -89,8 +90,9 @@ def build_workflow_graph(
     worker: WorkerExecutionPort,
     policy: DecisionGatePolicy,
     attempt_orchestrator: AttemptOrchestrator | None = None,
+    cancellation_probe: CancellationProbe | None = None,
 ) -> StateGraph:
-    """Build (but do not compile) the CP5 graph with attempt orchestration and RetryGrant."""
+    """Build (but do not compile) the CP6 graph with cancellation probes at boundaries."""
 
     def decision(state: GraphState) -> dict[str, object]:
         intent = intent_from_state(state)
@@ -111,8 +113,10 @@ def build_workflow_graph(
         return delta
 
     def execute_stub(state: GraphState) -> dict[str, object]:
-        intent = intent_from_state(state)
         run_id = str(state.get("workflow_run_id", ""))
+        if cancellation_probe is not None and cancellation_probe.is_cancel_requested(run_id):
+            return {"phase": PHASE_CANCELLED}
+        intent = intent_from_state(state)
         attempt_id: str | None = None
         if attempt_orchestrator is not None:
             attempt_id = attempt_orchestrator.before_execute(run_id, intent.logical_action_id)
@@ -178,9 +182,14 @@ def build_workflow_graph(
     graph.add_node(NODE_REVIEW, review)
     graph.add_node(NODE_PREPARE_INTENT, prepare_intent)
     graph.add_node(NODE_AWAIT_APPROVAL, await_approval)
-    graph.add_node(
-        NODE_PERSIST, lambda state: {"final_outcome": "completed", "phase": PHASE_COMPLETED}
-    )
+
+    def persist_handoff(state: GraphState) -> dict[str, object]:
+        run_id = str(state.get("workflow_run_id", ""))
+        if cancellation_probe is not None and cancellation_probe.is_cancel_requested(run_id):
+            return {"phase": PHASE_CANCELLED}
+        return {"final_outcome": "completed", "phase": PHASE_COMPLETED}
+
+    graph.add_node(NODE_PERSIST, persist_handoff)
     graph.add_node(NODE_FAILED, lambda state: {"final_outcome": "failed"})
     graph.add_node(NODE_REJECTED, lambda state: {"final_outcome": "rejected"})
     graph.add_node(NODE_CANCELLED, lambda state: {"final_outcome": "cancelled"})
@@ -215,7 +224,11 @@ def _wire_edges(graph: StateGraph) -> None:
             PHASE_FAILED: NODE_FAILED,  # RetryGrant bound fail-closed
         },
     )
-    graph.add_edge(NODE_EXECUTE, NODE_VALIDATE)
+    graph.add_conditional_edges(
+        NODE_EXECUTE,
+        phase_of,
+        {PHASE_VALIDATE: NODE_VALIDATE, PHASE_CANCELLED: NODE_CANCELLED},
+    )
     graph.add_conditional_edges(
         NODE_VALIDATE,
         phase_of,
@@ -236,7 +249,11 @@ def _wire_edges(graph: StateGraph) -> None:
             PHASE_PREPARE_INTENT: NODE_PREPARE_INTENT,
         },
     )
-    graph.add_edge(NODE_PERSIST, END)
+    graph.add_conditional_edges(
+        NODE_PERSIST,
+        phase_of,
+        {PHASE_COMPLETED: END, PHASE_CANCELLED: NODE_CANCELLED},
+    )
     graph.add_edge(NODE_FAILED, END)
     graph.add_edge(NODE_REJECTED, END)
     graph.add_edge(NODE_CANCELLED, END)

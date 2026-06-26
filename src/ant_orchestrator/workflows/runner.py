@@ -26,6 +26,7 @@ from ant_orchestrator.application.ports.workflow_runner import (
 )
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
+from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
 from ant_orchestrator.workflows.checkpointer import open_checkpointer
 from ant_orchestrator.workflows.decision_gate import DecisionGatePolicy
 from ant_orchestrator.workflows.graph import build_workflow_graph
@@ -79,12 +80,14 @@ class WorkflowRunner:
         policy: DecisionGatePolicy,
         checkpoint_db_path: Path,
         attempt_orchestrator: AttemptOrchestrator | None = None,
+        cancellation_probe: CancellationProbe | None = None,
         definition_version: int = WORKFLOW_DEFINITION_VERSION,
     ) -> None:
         self._worker = worker
         self._policy = policy
         self._path = checkpoint_db_path
         self._attempt_orchestrator = attempt_orchestrator
+        self._cancellation_probe = cancellation_probe
         self._definition_version = definition_version
 
     def check_definition_version(self, run_definition_version: int) -> None:
@@ -126,7 +129,10 @@ class WorkflowRunner:
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
             app = build_workflow_graph(
-                self._worker, self._policy, self._attempt_orchestrator
+                self._worker,
+                self._policy,
+                self._attempt_orchestrator,
+                self._cancellation_probe,
             ).compile(checkpointer=saver)
             snapshot = app.get_state(config)
             return self._summary(snapshot)
@@ -136,7 +142,10 @@ class WorkflowRunner:
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
             app = build_workflow_graph(
-                self._worker, self._policy, self._attempt_orchestrator
+                self._worker,
+                self._policy,
+                self._attempt_orchestrator,
+                self._cancellation_probe,
             ).compile(checkpointer=saver)
             return [self._summary(s) for s in app.get_state_history(config)]
 
@@ -144,7 +153,10 @@ class WorkflowRunner:
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
             app = build_workflow_graph(
-                self._worker, self._policy, self._attempt_orchestrator
+                self._worker,
+                self._policy,
+                self._attempt_orchestrator,
+                self._cancellation_probe,
             ).compile(checkpointer=saver)
             values = app.invoke(payload, config=config, durability=_DURABILITY_SYNC)
             snapshot = app.get_state(config)

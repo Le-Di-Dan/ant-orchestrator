@@ -71,3 +71,6 @@ EXECUTION_ATTEMPT_LEASE_SECONDS: Final = 300
 # Deterministic operation-id prefixes (idempotency keys for status transitions).
 PAUSE_OPERATION_PREFIX: Final = "pause-"
 COMPLETION_OPERATION_PREFIX: Final = "complete-"
+# CP6 — non-terminal status string for RUNNING cancellation (not a TaskStatus enum).
+CANCEL_REQUESTED_STATUS: Final = "cancel_requested"
+CANCEL_REQUEST_OPERATION_PREFIX: Final = "cancel-request-"

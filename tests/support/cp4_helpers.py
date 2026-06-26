@@ -6,8 +6,10 @@ individual test module stays within the 350-line file-size limit.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
+from ant_orchestrator.application.services.cancel_task import CancelTask
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
 from ant_orchestrator.application.services.reconciler import Reconciler
@@ -35,6 +37,7 @@ from ant_orchestrator.core.domain.workflow import WorkflowRun
 from ant_orchestrator.energy.enforcement import EnforcementPolicy
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
+from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
 from ant_orchestrator.workflows.decision_gate import DecisionGatePolicy
 from ant_orchestrator.workflows.runner import WorkflowRunner
 from ant_orchestrator.workspace.layout import CHECKPOINT_DB_FILENAME
@@ -69,7 +72,7 @@ def make_interrupt_runner(tmp_path: Path, worker: CountingWorker) -> InterruptRu
     )
 
 
-def uow_factory(db: Database):
+def uow_factory(db: Database) -> Callable[[], SqliteUnitOfWork]:
     return lambda: SqliteUnitOfWork(db)
 
 
@@ -78,7 +81,7 @@ def build_services(
     runner: WorkflowRunner,
     clock: FakeClock,
     ids: SequentialIdGenerator,
-):
+) -> tuple[RunWorkflow, ResolveApproval, Reconciler, PauseFinalizer, CompletionFinalizer]:
     uow_f = uow_factory(db)
     pause = PauseFinalizer(uow_f, clock=clock, ids=ids)
     complete = CompletionFinalizer(uow_f, clock=clock, ids=ids)
@@ -86,6 +89,34 @@ def build_services(
     resolve_svc = ResolveApproval(runner, uow_f, complete, pause, clock=clock, ids=ids)
     reconciler = Reconciler(runner, uow_f, pause, complete)
     return run_svc, resolve_svc, reconciler, pause, complete
+
+
+def build_cancel_svc(
+    db: Database,
+    runner: WorkflowRunner,
+    clock: FakeClock,
+    ids: SequentialIdGenerator,
+) -> CancelTask:
+    """Build a CancelTask service wired to the given database and runner."""
+    uow_f = uow_factory(db)
+    complete = CompletionFinalizer(uow_f, clock=clock, ids=ids)
+    return CancelTask(runner, uow_f, complete, clock=clock, ids=ids)
+
+
+def make_runner_with_probe(
+    tmp_path: Path,
+    worker: CountingWorker,
+    db: Database,
+) -> WorkflowRunner:
+    """Build a WorkflowRunner that checks cancel_requested_at at each graph boundary."""
+    uow_f = uow_factory(db)
+    probe = CancellationProbe(uow_f)
+    return WorkflowRunner(
+        worker=worker,
+        policy=DecisionGatePolicy(EnforcementPolicy()),
+        checkpoint_db_path=tmp_path / CHECKPOINT_DB_FILENAME,
+        cancellation_probe=probe,
+    )
 
 
 def add_task(db: Database, task_id: str = "T1", *, clock: FakeClock) -> None:
