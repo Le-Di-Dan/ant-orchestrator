@@ -401,7 +401,7 @@ Gọi đây là MVP end-to-end (execution còn stub); worker thật; memory retr
 
 ### Phase 5 — Documentation Ant: First Real Vertical Slice
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
 
 #### Mục tiêu
 Thay stub bằng **worker thật đầu tiên** trong một scenario thực — **First Real Worker Slice**.
