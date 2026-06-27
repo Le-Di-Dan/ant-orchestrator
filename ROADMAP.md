@@ -355,7 +355,7 @@ Sandbox cấp container; Adaptive Energy Optimizer; semantic context engine; emb
 
 ### Phase 4 — LangGraph Walking Skeleton, Checkpoint & Human Approval
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
 
 #### Mục tiêu
 Bộ khung workflow chạy được với **worker stub**. Đây **không** phải MVP end-to-end.
@@ -628,3 +628,4 @@ roadmap, chỉ cần PO xác nhận tại thời điểm phù hợp:
 | v1.1 | Phase 0 chuyển `NOT_STARTED` → `COMPLETED` sau independent closure audit. Evidence: `python -m pip install -e ".[dev]"`, `ant --help`, `ruff check`, `ruff format --check`, `mypy src scripts`, `pytest` (19 passed), `python -m scripts.quality.file_size`, unified gate `python -m scripts.quality.gate` (5/5 PASS) — tất cả exit 0. Chi tiết: `docs/plans/PHASE_0_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 0. | Phase 1–7 giữ `NOT_STARTED`. |
 | v1.2 | Phase 1 chuyển `NOT_STARTED` → `COMPLETED` sau implementation theo `docs/plans/PHASE_1_PLAN.md` (8 checkpoint) + closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 127 passed, smoke test `ant init/status/config show`, AST import-boundary, dependency mới duy nhất `pyyaml`. Chi tiết: `docs/plans/PHASE_1_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 1. | Phase 2–7 giữ `NOT_STARTED`. |
 | v1.3 | Phase 3 chuyển `NOT_STARTED` → `COMPLETED` sau implementation 20 commits (CP0–CP9) + independent closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 974 passed 7 skipped, 22 import-boundary tests PASS, 14 integration tests (8 cases) PASS, R-CP3-2 CLOSED, R-CP3-1 ACCEPTED_MVP_LIMITATION. Branch: `phase/3-execution-boundary`. Chi tiết: `docs/plans/PHASE_3_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 3. | Phase 4–7 giữ `NOT_STARTED`. |
+| v1.4 | Phase 4 chuyển `NOT_STARTED` → `COMPLETED` sau implementation CP1–CP8 (10 commits, worker = stub) + independent closure audit CP9. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 1219 passed 7 skipped, mypy strict 151 files, `pip check` clean, restart E2E đa-process thật A–H (0 CP8 skip), CLI smoke `ant init/task create/run/status`. Branch: `develop` (không source branch riêng). Chi tiết: `docs/plans/PHASE_4_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 4. | Phase 5–7 giữ `NOT_STARTED`. |
