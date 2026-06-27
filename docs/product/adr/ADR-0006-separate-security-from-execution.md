@@ -110,3 +110,9 @@ Tích cực:
 - Mở rộng import-boundary test theo từng checkpoint ngay khi package được tạo (không đợi tới cuối phase).
 - Nếu sau MVP cần thêm sandbox cấp container hoặc executor phân tán, cân nhắc ADR mới — không thuộc
   phạm vi Phase 3.
+
+> **Cập nhật (2026-06-27):** Phần "Phase 3 không xây container sandbox" được **supersede MỘT PHẦN HẸP**
+> bởi `ADR-0007-local-container-isolation-for-test-ant.md`, **chỉ** đối với isolated execution của
+> Test Ant trong Phase 6 (local Docker, read-only mount). Mọi quyết định khác của ADR-0006 (tách
+> `security/` ↔ `execution/`, dependency direction, confinement `subprocess`, phụ thuộc port) **giữ
+> nguyên hiệu lực**.
