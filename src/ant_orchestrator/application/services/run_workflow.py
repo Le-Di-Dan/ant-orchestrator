@@ -156,11 +156,16 @@ class RunWorkflow:
 
     def _handle_existing_run(self, run: WorkflowRun) -> WorkflowOutcome:
         """Re-enter or recover an existing active run."""
+        # Fail closed before any re-invoke/resume/finalize if this run was created under
+        # an incompatible workflow-definition version (CP8 re-entry version guard).
+        self._runner.check_definition_version(run.workflow_definition_version)
+
         if run.status == WorkflowRunStatus.AWAITING_APPROVAL:
             return self._re_enter_awaiting(run)
 
         # RUNNING: inspect the durable snapshot to determine the crash window.
         summary = self._runner.latest_state(run.thread_id)
+        self._runner.check_state_schema(summary.values)
 
         if summary.is_interrupted:
             # Crash #2: checkpoint is durable + interrupted, but PauseFinalizer never ran.
@@ -205,6 +210,7 @@ class RunWorkflow:
 
         # Approval missing (crash #2 variant): re-finalize from the durable snapshot.
         summary = self._runner.latest_state(run.thread_id)
+        self._runner.check_state_schema(summary.values)
         if not summary.is_interrupted:
             raise CheckpointRecoveryError(
                 f"run {run.id.value} is AWAITING_APPROVAL but the graph snapshot is not interrupted"

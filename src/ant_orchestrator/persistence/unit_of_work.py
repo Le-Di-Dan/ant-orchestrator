@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 from types import TracebackType
 
+from ant_orchestrator.config.constants import SQLITE_BUSY_TIMEOUT_MS
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.repositories.approval import ApprovalRepository
 from ant_orchestrator.persistence.repositories.execution_attempt import ExecutionAttemptRepository
@@ -44,7 +45,11 @@ class SqliteUnitOfWork:
         conn.row_factory = sqlite3.Row
         conn.isolation_level = None  # explicit BEGIN/COMMIT below
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("BEGIN")
+        # Wait (rather than fail) for a contended lock, and take the write lock at
+        # transaction start so two concurrent writers serialize instead of dead-locking
+        # on a deferred read-then-upgrade (PHASE_4_PLAN CP8 — concurrent approve race).
+        conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+        conn.execute("BEGIN IMMEDIATE")
         self._conn = conn
         return UnitOfWorkRepositories(conn)
 

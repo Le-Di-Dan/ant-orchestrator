@@ -18,6 +18,7 @@ from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
 from ant_orchestrator.workflows.decision_gate import DecisionGateOutcome, DecisionGatePolicy
+from ant_orchestrator.workflows.energy_gate import evaluate_energy_gate
 from ant_orchestrator.workflows.graph_support import (
     PHASE_AWAIT_APPROVAL,
     PHASE_CANCELLED,
@@ -96,7 +97,9 @@ def build_workflow_graph(
 
     def decision(state: GraphState) -> dict[str, object]:
         intent = intent_from_state(state)
-        if intent.requires_unsafe_command:
+        if intent.requires_energy_approval:
+            result = evaluate_energy_gate(policy, str(state.get("task_id", "")))
+        elif intent.requires_unsafe_command:
             result = policy.evaluate_unsafe_command(intent)
         else:
             result = policy.evaluate_significant_write(intent)

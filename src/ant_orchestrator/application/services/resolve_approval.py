@@ -25,6 +25,7 @@ from ant_orchestrator.application.services.workflow_support import (
     UnitOfWorkFactory,
     WorkflowOutcome,
     append_transition,
+    latest_persisted_decision,
 )
 from ant_orchestrator.config.constants import RESUME_LEASE_SECONDS
 from ant_orchestrator.core.domain.enums import (
@@ -133,8 +134,16 @@ class ResolveApproval:
             active_run = uow.workflow_runs.find_active_by_task(task_id)
 
             if active_run is None:
+                # Compare against the persisted decision *before* any terminal return so a
+                # conflicting decision is a conflict (exit 5), not a silent idempotent OK.
+                decided = latest_persisted_decision(uow.approvals.list_by_task(task_id))
+                if decided is not None and decided is not decision:
+                    raise ApprovalStateConflict(
+                        f"task {task_id_value} already resolved as {decided.value}; "
+                        f"cannot apply {decision.value}"
+                    )
                 if task.status.is_terminal:
-                    # Idempotent: task already terminal (PHASE_4_PLAN MICRO #2).
+                    # Idempotent: same decision already finalized (PHASE_4_PLAN MICRO #2).
                     return WorkflowOutcome(status=task.status.value, run_id="")
                 raise ApprovalRuleViolation(f"task {task_id_value} has no active workflow run")
             if active_run.status != WorkflowRunStatus.AWAITING_APPROVAL:
@@ -142,6 +151,10 @@ class ResolveApproval:
                     f"run {active_run.id.value} is {active_run.status.value}, "
                     "expected awaiting_approval"
                 )
+
+            # Fail closed before mutating the Approval/ResumeOperation if the run was
+            # created under an incompatible workflow-definition version (CP8 guard).
+            self._runner.check_definition_version(active_run.workflow_definition_version)
 
             approval = uow.approvals.find_pending_by_run(active_run.id)
             if approval is None:

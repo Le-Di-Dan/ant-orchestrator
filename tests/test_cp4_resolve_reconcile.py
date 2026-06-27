@@ -163,25 +163,24 @@ def test_approve_after_completed_is_idempotent(
     assert worker.calls == 1  # worker not re-invoked by the idempotent second call
 
 
-def test_approve_after_reject_returns_rejected_idempotent(
+def test_approve_after_reject_raises_conflict(
     database: Database,
     tmp_path: Path,
     clock: FakeClock,
     id_gen: SequentialIdGenerator,
 ) -> None:
-    """After REJECTED terminal, approve returns REJECTED idempotently (MICRO #2)."""
+    """A *different* decision after a REJECTED terminal is a conflict (CP8 correction)."""
     worker = CountingWorker()
     runner = make_interrupt_runner(tmp_path, worker)
     run_svc, resolve_svc, _, _, _ = build_services(database, runner, clock, id_gen)
     add_task(database, clock=clock)
 
     run_svc.execute("T1")
-    reject_outcome = resolve_svc.reject("T1")
-    assert reject_outcome.status == TaskStatus.REJECTED.value
+    assert resolve_svc.reject("T1").status == TaskStatus.REJECTED.value
 
-    # Calling approve on an already-terminal task returns the settled status.
-    approve_outcome = resolve_svc.approve("T1")
-    assert approve_outcome.status == TaskStatus.REJECTED.value
+    # The persisted decision (REJECTED) is checked before any terminal return.
+    with pytest.raises(ApprovalStateConflict):
+        resolve_svc.approve("T1")
     assert worker.calls == 0
 
 

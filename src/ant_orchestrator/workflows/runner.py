@@ -97,6 +97,17 @@ class WorkflowRunner:
                 f"run definition version {run_definition_version} != {self._definition_version}"
             )
 
+    def check_state_schema(self, values: Mapping[str, object]) -> None:
+        """Fail closed if a durable snapshot's graph-state schema is unsupported.
+
+        A snapshot with no schema field is an *empty* thread (no durable checkpoint
+        yet) — not a mismatch — so it is skipped; callers handle the never-invoked
+        case separately.
+        """
+        if values.get("graph_state_schema_version") is None:
+            return
+        self._ensure_schema(values)
+
     def build_initial_state(
         self, *, task_id: str, workflow_run_id: str, base_retry_limit: int
     ) -> dict[str, object]:
@@ -120,9 +131,14 @@ class WorkflowRunner:
         return self._drive(dict(initial_state), thread_id=thread_id)
 
     def resume(self, *, thread_id: str, interrupt_id: str, decision: str) -> WorkflowInvokeResult:
-        """Resume a paused graph with an interrupt-specific decision mapping."""
+        """Resume a paused graph with an interrupt-specific decision mapping.
+
+        The durable snapshot's graph-state schema is re-validated before driving the
+        ``Command`` so a checkpoint written by an incompatible code version fails closed
+        instead of resuming into a state this topology no longer understands.
+        """
         command = Command(resume={interrupt_id: decision})
-        return self._drive(command, thread_id=thread_id)
+        return self._drive(command, thread_id=thread_id, check_schema=True)
 
     def latest_state(self, thread_id: str) -> StateSummary:
         """Read the latest durable snapshot (opens a fresh connection)."""
@@ -149,7 +165,9 @@ class WorkflowRunner:
             ).compile(checkpointer=saver)
             return [self._summary(s) for s in app.get_state_history(config)]
 
-    def _drive(self, payload: object, *, thread_id: str) -> WorkflowInvokeResult:
+    def _drive(
+        self, payload: object, *, thread_id: str, check_schema: bool = False
+    ) -> WorkflowInvokeResult:
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
             app = build_workflow_graph(
@@ -158,6 +176,8 @@ class WorkflowRunner:
                 self._attempt_orchestrator,
                 self._cancellation_probe,
             ).compile(checkpointer=saver)
+            if check_schema:
+                self._ensure_schema(app.get_state(config).values)
             values = app.invoke(payload, config=config, durability=_DURABILITY_SYNC)
             snapshot = app.get_state(config)
             interrupts = _interrupt_views(snapshot)

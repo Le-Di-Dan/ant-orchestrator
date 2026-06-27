@@ -169,13 +169,15 @@ def test_awaiting_cancel_duplicate_reuses_resume_operation(
     assert rows[0] == 1
 
 
-def test_awaiting_approve_after_cancel_returns_terminal(
+def test_awaiting_approve_after_cancel_raises_conflict(
     database: Database,
     tmp_path: Path,
     clock: FakeClock,
     id_gen: SequentialIdGenerator,
 ) -> None:
-    """After cancel fully terminates the task, APPROVE returns the terminal status (idempotent)."""
+    """After CANCELLED terminal, a different decision (approve) is a conflict (CP8)."""
+    from ant_orchestrator.application.errors import ApprovalStateConflict
+
     worker = CountingWorker()
     runner = make_interrupt_runner(tmp_path, worker)
     run_svc, resolve_svc, _, _, _ = build_services(database, runner, clock, id_gen)
@@ -185,10 +187,10 @@ def test_awaiting_approve_after_cancel_returns_terminal(
 
     cancel_svc.cancel("T1")
 
-    # Task is now CANCELLED (terminal); approve on a terminal task must not crash and
-    # must return the stored terminal status without touching the approval again.
-    outcome = resolve_svc.approve("T1")
-    assert outcome.status == TaskStatus.CANCELLED.value
+    # Task is CANCELLED; the persisted decision is checked before any terminal return,
+    # so a conflicting APPROVE fails closed instead of returning a misleading status.
+    with pytest.raises(ApprovalStateConflict):
+        resolve_svc.approve("T1")
 
 
 def test_awaiting_cancel_approval_transition_recorded(

@@ -9,14 +9,19 @@ same idempotency key instead of appending a duplicate transition.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from ant_orchestrator.config.constants import (
     COMPLETION_OPERATION_PREFIX,
     PAUSE_OPERATION_PREFIX,
 )
-from ant_orchestrator.core.domain.enums import TransitionSubject, TransitionTrigger
+from ant_orchestrator.core.domain.enums import (
+    ApprovalStatus,
+    TransitionSubject,
+    TransitionTrigger,
+)
+from ant_orchestrator.core.domain.records import Approval
 from ant_orchestrator.core.domain.value_objects import TransitionId, UtcTimestamp, WorkflowRunId
 from ant_orchestrator.core.domain.workflow import StatusTransition
 from ant_orchestrator.core.ports.ids import IdGenerator
@@ -73,6 +78,17 @@ def append_transition(
             from_status=from_status,
         )
     )
+
+
+def latest_persisted_decision(approvals: Sequence[Approval]) -> ApprovalStatus | None:
+    """Return the most recent *resolved* approval decision for a task (or ``None``).
+
+    ``approvals`` must be ordered oldest-first (``list_by_task``). Used so a resolve
+    on an already-terminal task is classified as an idempotent replay (same decision)
+    or a conflict (different decision) instead of an unconditional terminal return.
+    """
+    resolved = [approval.status for approval in approvals if approval.status.is_terminal]
+    return resolved[-1] if resolved else None
 
 
 @dataclass(frozen=True, slots=True)

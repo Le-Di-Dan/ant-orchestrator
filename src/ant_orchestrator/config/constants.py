@@ -64,6 +64,11 @@ WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
 WORKFLOW_MAX_REGROUPS: Final = 1
 
+# Milliseconds a write unit of work waits for a contended SQLite lock before giving
+# up. Paired with ``BEGIN IMMEDIATE`` it lets concurrent writers (e.g. two ``approve``
+# processes) serialize cleanly instead of dead-locking on a read-then-upgrade.
+SQLITE_BUSY_TIMEOUT_MS: Final = 5000
+
 # CP4/CP5 coordination constants. Lease durations bound how long an owner may hold
 # the right to drive a graph operation before recovery may reclaim it.
 RESUME_LEASE_SECONDS: Final = 300

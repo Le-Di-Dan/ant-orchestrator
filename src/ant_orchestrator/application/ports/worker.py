@@ -41,6 +41,7 @@ class WorkerActionIntent:
     summary: str
     requires_significant_write: bool = False
     requires_unsafe_command: bool = False
+    requires_energy_approval: bool = False
     target_paths: tuple[str, ...] = ()
     command_argv: tuple[str, ...] = ()
 
@@ -57,6 +58,7 @@ class WorkerActionIntent:
             "summary": self.summary,
             "requires_significant_write": self.requires_significant_write,
             "requires_unsafe_command": self.requires_unsafe_command,
+            "requires_energy_approval": self.requires_energy_approval,
             "target_paths": list(self.target_paths),
             "command_argv": list(self.command_argv),
         }
@@ -71,6 +73,7 @@ class WorkerActionIntent:
             summary=str(data.get("summary") or "stub action"),
             requires_significant_write=bool(data.get("requires_significant_write", False)),
             requires_unsafe_command=bool(data.get("requires_unsafe_command", False)),
+            requires_energy_approval=bool(data.get("requires_energy_approval", False)),
             target_paths=tuple(str(p) for p in (_tgt if isinstance(_tgt, (list, tuple)) else ())),
             command_argv=tuple(str(a) for a in (_cmd if isinstance(_cmd, (list, tuple)) else ())),
         )

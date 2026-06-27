@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ant_orchestrator.config.constants import SQLITE_BUSY_TIMEOUT_MS
+
 
 class Database:
     """Owns a SQLite file path and hands out short-lived connections."""
@@ -29,6 +31,9 @@ class Database:
         try:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
+            # Wait for a contended lock instead of failing immediately (concurrent
+            # readers vs. a committing writer — PHASE_4_PLAN CP8).
+            conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
             yield conn
         finally:
             conn.close()

@@ -69,6 +69,10 @@ class WorkflowRunnerPort(Protocol):
         """Raise ``WorkflowDefinitionMismatch`` if a run predates this topology."""
         ...
 
+    def check_state_schema(self, values: Mapping[str, object]) -> None:
+        """Raise ``GraphStateSchemaMismatch`` if a durable snapshot is incompatible."""
+        ...
+
     def build_initial_state(
         self, *, task_id: str, workflow_run_id: str, base_retry_limit: int
     ) -> dict[str, object]:

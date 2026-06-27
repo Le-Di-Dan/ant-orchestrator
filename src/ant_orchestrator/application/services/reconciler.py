@@ -50,7 +50,11 @@ class Reconciler:
         if run.status != WorkflowRunStatus.RUNNING:
             return None
 
+        # Fail closed before any finalize/recovery if the run predates this topology.
+        self._runner.check_definition_version(run.workflow_definition_version)
+
         summary = self._runner.latest_state(run.thread_id)
+        self._runner.check_state_schema(summary.values)
 
         if summary.is_interrupted:
             # Crash #2: paused checkpoint exists but PauseFinalizer never ran.

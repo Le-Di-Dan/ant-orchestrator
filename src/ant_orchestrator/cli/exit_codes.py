@@ -16,6 +16,7 @@ from ant_orchestrator.application.errors import (
     WorkflowStateError,
 )
 from ant_orchestrator.application.ports.database import DatabasePortError
+from ant_orchestrator.application.ports.workflow_runner import WorkflowRunnerError
 from ant_orchestrator.application.ports.workspace import WorkspacePortError
 from ant_orchestrator.config.errors import ConfigError
 from ant_orchestrator.core.domain.errors import DomainError
@@ -34,6 +35,10 @@ def exit_code_for(error: BaseException) -> int:
     # Recovery/storage is classified before the WorkflowStateError base so a missing
     # checkpoint after progress is never mistaken for a state conflict (CP7 §12).
     if isinstance(error, CheckpointRecoveryError):
+        return EXIT_PERSISTENCE
+    # A graph-state / workflow-definition version mismatch is a fail-closed recovery
+    # condition (not a usage error), so it shares the storage/recovery exit code.
+    if isinstance(error, WorkflowRunnerError):
         return EXIT_PERSISTENCE
     if isinstance(error, ApprovalRuleViolation):
         return EXIT_APPROVAL_RULE

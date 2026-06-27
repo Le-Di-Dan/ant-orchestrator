@@ -22,6 +22,7 @@ from ant_orchestrator.application.services.workflow_support import (
     UnitOfWorkFactory,
     WorkflowOutcome,
     append_transition,
+    latest_persisted_decision,
 )
 from ant_orchestrator.config.constants import (
     CANCEL_REQUEST_OPERATION_PREFIX,
@@ -73,8 +74,15 @@ class CancelTask:
         with self._uow_factory() as uow:
             task = uow.tasks.get(task_id)
             active_run = uow.workflow_runs.find_active_by_task(task_id)
+            decided = latest_persisted_decision(uow.approvals.list_by_task(task_id))
 
         if task.status.is_terminal:
+            # A different persisted decision (approved/rejected) cannot be re-cancelled.
+            if decided is not None and decided is not ApprovalStatus.CANCELLED:
+                raise ApprovalStateConflict(
+                    f"task {task_id_value} already resolved as {decided.value}; "
+                    "cannot apply cancelled"
+                )
             return WorkflowOutcome(status=task.status.value, run_id="")
 
         if active_run is None:
@@ -115,6 +123,10 @@ class CancelTask:
             approval = uow.approvals.find_pending_by_run(run_id)
             if approval is None:
                 raise WorkflowStateError(f"no pending approval found for run {run_id.value}")
+
+            # Fail closed before mutating the Approval/ResumeOperation if the run was
+            # created under an incompatible workflow-definition version (CP8 guard).
+            self._runner.check_definition_version(active_run.workflow_definition_version)
 
             existing_op = uow.resume_operations.find_by_approval(approval.id)
 
