@@ -56,6 +56,12 @@ class GraphState(TypedDict, total=False):
     # references — the package reference and the manifest digest a proposal binds to.
     context_package_ref: str
     manifest_digest: str
+    # Phase 5 CP6: the durable proposal the approval binds to, and the resolved approval
+    # reference. All optional/additive (schema 2 still round-trips); the production Phase 5
+    # path requires them at runtime and fails closed when absent (they never fall back).
+    proposal_ref: str
+    proposal_digest: str
+    approval_ref: str
     action_intent: dict[str, object]
     approval_intent: dict[str, object]
     approval_decision: dict[str, object] | None

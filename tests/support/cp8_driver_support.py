@@ -86,13 +86,20 @@ class _CrashRunWorkflow(RunWorkflow):
     """
 
     def _invoke_and_finalize(
-        self, run_id: WorkflowRunId, thread_id: str, task_id: TaskId
+        self,
+        run_id: WorkflowRunId,
+        thread_id: str,
+        task_id: TaskId,
+        *,
+        extras: dict[str, object] | None = None,
     ) -> WorkflowOutcome:
         initial_state = self._runner.build_initial_state(
             task_id=task_id.value,
             workflow_run_id=run_id.value,
             base_retry_limit=WORKFLOW_MAX_RETRIES,
         )
+        if extras:
+            initial_state.update(extras)
         self._runner.invoke(initial_state, thread_id=thread_id)
         return WorkflowOutcome(status="crashed", run_id=run_id.value)
 

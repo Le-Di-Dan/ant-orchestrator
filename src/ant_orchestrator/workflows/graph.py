@@ -13,6 +13,9 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from ant_orchestrator.application.ports.documentation_execution import (
+    DocumentationExecutionPort,
+)
 from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
@@ -71,6 +74,58 @@ NODE_CANCELLED = "cancelled"
 _OUTCOME_KEY = "last_outcome"
 
 
+def _bind_approval(delta: dict[str, object], intent: dict[str, object], state: GraphState) -> None:
+    """On approve-to-execute, verify the approval binds this proposal and stamp its ref.
+
+    The approval intent carried the proposal digest into the human gate; a mismatch with
+    the durable proposal in state means the approval is for a different proposal — fail
+    closed (no execution under a foreign authority).
+    """
+    if delta.get("phase") != PHASE_EXECUTE:
+        return
+    proposal_digest = state.get("proposal_digest")
+    if not (isinstance(proposal_digest, str) and proposal_digest):
+        return  # legacy / non-documentation run carries no proposal binding
+    payload = intent.get("sanitized_payload")
+    bound = payload.get("proposal_digest") if isinstance(payload, dict) else None
+    if bound != proposal_digest:
+        delta["phase"] = PHASE_FAILED
+        delta["error_summary"] = "approval_binding_mismatch"
+        return
+    delta["approval_ref"] = str(intent.get("gate_instance_id", ""))
+
+
+def _execute_documentation(
+    port: DocumentationExecutionPort, state: GraphState, run_id: str
+) -> dict[str, object]:
+    """Drive the durable Documentation Ant path; fail closed on missing proposal authority.
+
+    The production Phase 5 path never falls back to a placeholder context or a stub: a run
+    that reaches execution without a bound proposal is a structured ``FAILED`` (no provider).
+    """
+    proposal_ref = str(state.get("proposal_ref", ""))
+    proposal_digest = str(state.get("proposal_digest", ""))
+    if not proposal_ref or not proposal_digest:
+        return {"phase": PHASE_FAILED, "error_summary": "missing_proposal_authority"}
+    outcome = port.execute(
+        task_id=str(state.get("task_id", "")),
+        run_id=run_id,
+        proposal_ref=proposal_ref,
+        proposal_digest=proposal_digest,
+        approval_ref=str(state.get("approval_ref", "")),
+    )
+    action_intent = dict(state.get("action_intent") or {})
+    action_intent[_OUTCOME_KEY] = outcome.outcome.value
+    evidence = list(state.get("evidence_refs") or [])
+    evidence.extend(outcome.evidence_refs)
+    return {
+        "action_intent": action_intent,
+        "evidence_refs": evidence,
+        "phase": PHASE_VALIDATE,
+        "execution_attempt_ref": outcome.attempt_ref,
+    }
+
+
 def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, object]) -> None:
     """Merge a routing result into a node delta, folding any escalation gate."""
     gate_type = route.pop("gate_type", None)
@@ -92,8 +147,15 @@ def build_workflow_graph(
     policy: DecisionGatePolicy,
     attempt_orchestrator: AttemptOrchestrator | None = None,
     cancellation_probe: CancellationProbe | None = None,
+    documentation_execution: DocumentationExecutionPort | None = None,
 ) -> StateGraph:
-    """Build (but do not compile) the CP6 graph with cancellation probes at boundaries."""
+    """Build (but do not compile) the graph.
+
+    When ``documentation_execution`` is injected (Phase 5 production), the execution node
+    drives the real durable Documentation Ant path (proposal/approval bound, persistence,
+    journal completion, attempt settlement). Without it (legacy/unit tests), the node runs
+    the deterministic stub worker. The production composition root never leaves it ``None``.
+    """
 
     def decision(state: GraphState) -> dict[str, object]:
         intent = intent_from_state(state)
@@ -119,6 +181,8 @@ def build_workflow_graph(
         run_id = str(state.get("workflow_run_id", ""))
         if cancellation_probe is not None and cancellation_probe.is_cancel_requested(run_id):
             return {"phase": PHASE_CANCELLED}
+        if documentation_execution is not None:
+            return _execute_documentation(documentation_execution, state, run_id)
         intent = intent_from_state(state)
         attempt_id: str | None = None
         if attempt_orchestrator is not None:
@@ -174,6 +238,7 @@ def build_workflow_graph(
         delta["approval_decision"] = {"decision": decision_token}
         # Clear approval_intent so the next prepare_intent treats it as a new occurrence.
         delta["approval_intent"] = None
+        _bind_approval(delta, intent, state)
         return delta
 
     graph = StateGraph(GraphState)

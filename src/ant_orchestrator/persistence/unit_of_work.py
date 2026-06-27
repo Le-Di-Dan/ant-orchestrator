@@ -15,6 +15,11 @@ from ant_orchestrator.config.constants import SQLITE_BUSY_TIMEOUT_MS
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.repositories.approval import ApprovalRepository
 from ant_orchestrator.persistence.repositories.execution_attempt import ExecutionAttemptRepository
+from ant_orchestrator.persistence.repositories.execution_records import (
+    ConnEnergyUsageRepository,
+    ConnExecutionEvidenceRepository,
+    ConnWorkerRunRepository,
+)
 from ant_orchestrator.persistence.repositories.resume_operation import ResumeOperationRepository
 from ant_orchestrator.persistence.repositories.status_transition import StatusTransitionRepository
 from ant_orchestrator.persistence.repositories.task import TaskRepository
@@ -31,6 +36,10 @@ class UnitOfWorkRepositories:
         self.transitions = StatusTransitionRepository(conn)
         self.execution_attempts = ExecutionAttemptRepository(conn)
         self.resume_operations = ResumeOperationRepository(conn)
+        # Phase 5 CP6: execution records persisted atomically with the rest of the UoW.
+        self.worker_runs = ConnWorkerRunRepository(conn)
+        self.evidence = ConnExecutionEvidenceRepository(conn)
+        self.energy_usage = ConnEnergyUsageRepository(conn)
 
 
 class SqliteUnitOfWork:

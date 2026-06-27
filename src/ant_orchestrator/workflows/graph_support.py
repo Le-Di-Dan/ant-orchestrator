@@ -155,7 +155,11 @@ def route_after_approval(intent: Mapping[str, object], decision: str) -> str:
 def build_escalation_payload(
     state: Mapping[str, object], gate_type: GateType, reason: str
 ) -> dict[str, object]:
-    """Build a sanitized payload with diagnostic counters for an escalation gate."""
+    """Build a sanitized payload with diagnostic counters for an escalation gate.
+
+    For a Phase 5 documentation write, the proposal binding (ref/digest/target) is folded
+    in so the human reviews — and the approval binds — the exact proposal that will run.
+    """
     payload: dict[str, object] = {"reason": reason}
     if gate_type is GateType.RETRY_LIMIT:
         payload["retry_count"] = as_int(state.get("retry_count"))
@@ -165,6 +169,11 @@ def build_escalation_payload(
         )
     elif gate_type is GateType.SCOPE_CHANGE:
         payload["regroup_count"] = as_int(state.get("regroup_count"))
+    proposal_digest = state.get("proposal_digest")
+    if isinstance(proposal_digest, str) and proposal_digest:
+        payload["proposal_ref"] = str(state.get("proposal_ref", ""))
+        payload["proposal_digest"] = proposal_digest
+        payload["manifest_digest"] = str(state.get("manifest_digest", ""))
     return payload
 
 

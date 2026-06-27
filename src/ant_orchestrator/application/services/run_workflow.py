@@ -15,6 +15,9 @@ Re-entry paths:
 from __future__ import annotations
 
 from ant_orchestrator.application.errors import CheckpointRecoveryError, WorkflowStateError
+from ant_orchestrator.application.ports.documentation_execution import (
+    WorkflowDocumentationPreparer,
+)
 from ant_orchestrator.application.ports.workflow_runner import WorkflowRunnerPort
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
@@ -28,6 +31,7 @@ from ant_orchestrator.config.constants import (
     WORKFLOW_DEFINITION_VERSION,
     WORKFLOW_MAX_RETRIES,
 )
+from ant_orchestrator.core.domain.entities import Task
 from ant_orchestrator.core.domain.enums import (
     TaskStatus,
     TransitionSubject,
@@ -52,6 +56,7 @@ class RunWorkflow:
         *,
         clock: Clock,
         ids: IdGenerator,
+        documentation_preparer: WorkflowDocumentationPreparer | None = None,
     ) -> None:
         self._runner = runner
         self._uow_factory = uow_factory
@@ -59,6 +64,7 @@ class RunWorkflow:
         self._completion_finalizer = completion_finalizer
         self._clock = clock
         self._ids = ids
+        self._documentation_preparer = documentation_preparer
 
     def execute(self, task_id_value: str) -> WorkflowOutcome:
         """Run or re-enter the workflow for the given task."""
@@ -76,18 +82,26 @@ class RunWorkflow:
         if active_run is not None:
             return self._handle_existing_run(active_run)
 
-        return self._create_and_invoke(task_id)
+        return self._create_and_invoke(task_id, task)
 
     # ------------------------------------------------------------------
     # internal helpers
     # ------------------------------------------------------------------
 
-    def _create_and_invoke(self, task_id: TaskId) -> WorkflowOutcome:
+    def _create_and_invoke(self, task_id: TaskId, task: Task) -> WorkflowOutcome:
         """Create WorkflowRun + transitions in UoW, then invoke the graph."""
         run_id = WorkflowRunId(self._ids.new_id())
         now = self._clock.now()
         invoke_op_id = f"invoke-{run_id.value}"
         thread_id = thread_id_for(run_id.value)
+
+        # Phase 5 CP6: prepare context + proposal BEFORE the run is created so a scope/identity
+        # failure fails closed with no orphan run. A non-documentation task returns no extras.
+        extras: dict[str, object] = {}
+        if self._documentation_preparer is not None:
+            prepared = self._documentation_preparer.prepare_initial_state(run_id.value, task)
+            if prepared is not None:
+                extras = dict(prepared)
 
         run = WorkflowRun(
             id=run_id,
@@ -125,10 +139,15 @@ class RunWorkflow:
                 operation_id=f"{invoke_op_id}-task",
             )
 
-        return self._invoke_and_finalize(run_id, thread_id, task_id)
+        return self._invoke_and_finalize(run_id, thread_id, task_id, extras=extras)
 
     def _invoke_and_finalize(
-        self, run_id: WorkflowRunId, thread_id: str, task_id: TaskId
+        self,
+        run_id: WorkflowRunId,
+        thread_id: str,
+        task_id: TaskId,
+        *,
+        extras: dict[str, object] | None = None,
     ) -> WorkflowOutcome:
         """Invoke the graph and dispatch to the appropriate finalizer."""
         initial_state = self._runner.build_initial_state(
@@ -136,6 +155,8 @@ class RunWorkflow:
             workflow_run_id=run_id.value,
             base_retry_limit=WORKFLOW_MAX_RETRIES,
         )
+        if extras:
+            initial_state.update(extras)
         result = self._runner.invoke(initial_state, thread_id=thread_id)
 
         if result.interrupt is not None:

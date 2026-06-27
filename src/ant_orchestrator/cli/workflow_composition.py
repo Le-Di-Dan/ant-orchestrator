@@ -12,6 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ant_orchestrator.application.ports.documentation_execution import (
+    DocumentationExecutionPort,
+    WorkflowDocumentationPreparer,
+)
 from ant_orchestrator.application.ports.workspace import NestNotFound
 from ant_orchestrator.application.services.cancel_task import CancelTask
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
@@ -51,11 +55,21 @@ class WorkflowServices:
     task_status: GetTaskStatus
 
 
-def build_workflow_services(start: Path) -> WorkflowServices:
-    """Discover the Nest from ``start`` and assemble the Phase 4 services.
+def build_workflow_services(
+    start: Path,
+    *,
+    documentation_execution: DocumentationExecutionPort | None = None,
+    documentation_preparer: WorkflowDocumentationPreparer | None = None,
+) -> WorkflowServices:
+    """Discover the Nest from ``start`` and assemble the Phase 4/5 services.
 
     Raises :class:`NestNotFound` (→ exit 3) when no ``.ant/`` exists at or above
     ``start``; storage/schema problems surface later as ``DatabasePortError`` (→ 4).
+
+    Phase 5 CP6: injecting ``documentation_execution`` + ``documentation_preparer`` switches
+    the production path to the durable Documentation Ant (proposal/approval bound, durable
+    persistence). When omitted (Phase 4 / legacy), the deterministic stub worker is used —
+    the live provider wiring of these two collaborators is assembled in CP7.
     """
     root = find_nest(start)
     if root is None:
@@ -77,6 +91,7 @@ def build_workflow_services(start: Path) -> WorkflowServices:
         checkpoint_db_path=checkpoint_path,
         attempt_orchestrator=AttemptOrchestrator(uow_factory, clock=clock, ids=ids),
         cancellation_probe=CancellationProbe(uow_factory),
+        documentation_execution=documentation_execution,
     )
     pause = PauseFinalizer(uow_factory, clock=clock, ids=ids)
     complete = CompletionFinalizer(uow_factory, clock=clock, ids=ids)
@@ -84,7 +99,15 @@ def build_workflow_services(start: Path) -> WorkflowServices:
     return WorkflowServices(
         root=root,
         create_task=CreateTask(uow_factory, clock=clock, ids=ids),
-        run_workflow=RunWorkflow(runner, uow_factory, pause, complete, clock=clock, ids=ids),
+        run_workflow=RunWorkflow(
+            runner,
+            uow_factory,
+            pause,
+            complete,
+            clock=clock,
+            ids=ids,
+            documentation_preparer=documentation_preparer,
+        ),
         resolve_approval=ResolveApproval(
             runner, uow_factory, complete, pause, clock=clock, ids=ids
         ),

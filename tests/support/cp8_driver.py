@@ -21,6 +21,7 @@ from typing import NoReturn
 
 from ant_orchestrator.application.ports.worker import WorkerOutcome
 from ant_orchestrator.cli.exit_codes import exit_code_for
+from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.core.domain.enums import ActorSource
 from ant_orchestrator.errors import AntError
 from tests.support.cp8_driver_support import (
@@ -110,7 +111,11 @@ def main(argv: list[str]) -> int:
         significant_write=args.significant_write,
         unsafe_command=args.unsafe_command,
         energy_approval=args.energy_approval,
-        definition_version=(args.definition_version if args.definition_version is not None else 2),
+        definition_version=(
+            args.definition_version
+            if args.definition_version is not None
+            else WORKFLOW_DEFINITION_VERSION
+        ),
     )
 
     try:
@@ -124,7 +129,9 @@ def main(argv: list[str]) -> int:
                 task_id=args.task_id,
                 observed=args.observed,
                 definition_version=(
-                    args.definition_version if args.definition_version is not None else 2
+                    args.definition_version
+                    if args.definition_version is not None
+                    else WORKFLOW_DEFINITION_VERSION
                 ),
             )
             _emit({"command": command, "task_id": args.task_id, "workflow_run_id": run_id})

@@ -15,6 +15,9 @@ from typing import Any
 
 from langgraph.types import Command
 
+from ant_orchestrator.application.ports.documentation_execution import (
+    DocumentationExecutionPort,
+)
 from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.application.ports.workflow_runner import (
     GraphStateSchemaMismatch,
@@ -82,6 +85,7 @@ class WorkflowRunner:
         attempt_orchestrator: AttemptOrchestrator | None = None,
         cancellation_probe: CancellationProbe | None = None,
         definition_version: int = WORKFLOW_DEFINITION_VERSION,
+        documentation_execution: DocumentationExecutionPort | None = None,
     ) -> None:
         self._worker = worker
         self._policy = policy
@@ -89,6 +93,17 @@ class WorkflowRunner:
         self._attempt_orchestrator = attempt_orchestrator
         self._cancellation_probe = cancellation_probe
         self._definition_version = definition_version
+        self._documentation_execution = documentation_execution
+
+    def _build_app(self, saver: object) -> Any:
+        """Compile the graph against ``saver`` with all injected dependencies."""
+        return build_workflow_graph(
+            self._worker,
+            self._policy,
+            self._attempt_orchestrator,
+            self._cancellation_probe,
+            self._documentation_execution,
+        ).compile(checkpointer=saver)
 
     def check_definition_version(self, run_definition_version: int) -> None:
         """Fail closed if a run was created under a different graph topology version."""
@@ -144,12 +159,7 @@ class WorkflowRunner:
         """Read the latest durable snapshot (opens a fresh connection)."""
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
-            app = build_workflow_graph(
-                self._worker,
-                self._policy,
-                self._attempt_orchestrator,
-                self._cancellation_probe,
-            ).compile(checkpointer=saver)
+            app = self._build_app(saver)
             snapshot = app.get_state(config)
             return self._summary(snapshot)
 
@@ -157,12 +167,7 @@ class WorkflowRunner:
         """Return the full super-step history (diagnostic/test use)."""
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
-            app = build_workflow_graph(
-                self._worker,
-                self._policy,
-                self._attempt_orchestrator,
-                self._cancellation_probe,
-            ).compile(checkpointer=saver)
+            app = self._build_app(saver)
             return [self._summary(s) for s in app.get_state_history(config)]
 
     def _drive(
@@ -170,12 +175,7 @@ class WorkflowRunner:
     ) -> WorkflowInvokeResult:
         config = self._config(thread_id)
         with open_checkpointer(self._path) as saver:
-            app = build_workflow_graph(
-                self._worker,
-                self._policy,
-                self._attempt_orchestrator,
-                self._cancellation_probe,
-            ).compile(checkpointer=saver)
+            app = self._build_app(saver)
             if check_schema:
                 self._ensure_schema(app.get_state(config).values)
             values = app.invoke(payload, config=config, durability=_DURABILITY_SYNC)

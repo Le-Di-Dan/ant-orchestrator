@@ -60,10 +60,14 @@ TOKEN_ESTIMATION_DEFAULT_DIVISOR: Final = 4
 # and ``manifest_digest`` (anti-TOCTOU binding). A pre-CP2 checkpoint lacks them, so it
 # must fail closed (GraphStateSchemaMismatch) instead of resuming without a digest.
 GRAPH_STATE_SCHEMA_VERSION: Final = 2
-# Topology unchanged in Phase 5 CP2 (no node/edge added); the definition bump 2→3 is
-# deferred to CP6 where execution semantics change. The state-schema bump above already
-# fail-closes every pre-CP2 checkpoint, so a second version axis here would be redundant.
-WORKFLOW_DEFINITION_VERSION: Final = 2
+# Phase 5 CP6 bumps the definition 2→3: the workflow now drives a real side-effecting
+# Documentation Ant (proposal/approval binding, durable persistence, recovery), so a
+# pre-CP6 (definition-2) checkpoint must fail closed (WorkflowDefinitionMismatch) rather
+# than resume under the new execution semantics. The state schema stays 2: CP6 only adds
+# OPTIONAL JSON-safe state fields (proposal/approval/attempt/report refs), so a schema-2
+# checkpoint still round-trips — the runtime invariants (not the schema) enforce them on
+# the Phase 5 production path.
+WORKFLOW_DEFINITION_VERSION: Final = 3
 WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
 WORKFLOW_MAX_REGROUPS: Final = 1
@@ -87,6 +91,17 @@ CANCEL_REQUEST_OPERATION_PREFIX: Final = "cancel-request-"
 CLI_JSON_SCHEMA_VERSION: Final = 1
 # CP7 — ``ant status`` shows at most this many most-recent tasks (no pagination yet).
 STATUS_RECENT_TASK_LIMIT: Final = 50
+
+# --- Phase 5 CP6: durable documentation-ant integration ----------------------
+# Worker-kind tag folded into the deterministic ``WorkerRunId`` so two worker types
+# acting on the same logical action can never collide on one run identity.
+DOC_WORKER_KIND: Final = "documentation"
+# Versioned, typed evidence envelope persisted in the existing ``evidence.result``
+# column (no schema migration in CP6). The validator rejects any other version.
+EVIDENCE_ENVELOPE_SCHEMA_VERSION: Final = 1
+# Hard upper bound on the serialized evidence envelope (sanitized refs only — never a
+# raw prompt, provider output, or artifact payload).
+MAX_EVIDENCE_ENVELOPE_BYTES: Final = 16_384
 # CP7 — a rejection reason is sanitized and bounded to this many characters.
 MAX_REJECT_REASON_CHARS: Final = 500
 

@@ -184,8 +184,16 @@ def test_report_models_all_section_12_fields() -> None:
         next_steps=("review",),
     )
     assert report.result is WorkerOutcome.SUCCESS
-    required = {"summary", "files_read", "files_changed", "commands", "result",
-               "evidence_refs", "risks", "next_steps"}
+    required = {
+        "summary",
+        "files_read",
+        "files_changed",
+        "commands",
+        "result",
+        "evidence_refs",
+        "risks",
+        "next_steps",
+    }
     assert required.issubset(_field_names(WorkerExecutionReport))
 
 

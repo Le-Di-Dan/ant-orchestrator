@@ -1,12 +1,13 @@
-"""Single-process worker energy lifecycle (PHASE_5_PLAN CP5).
+"""Production worker energy lifecycle paired with durable settlement (PHASE_5_PLAN CP6).
 
-A deterministic, in-memory implementation of ``WorkerEnergyLifecycle``. It maps a
-reservation reference to its reserved token amount, reverifies validity before a
-provider call, and settles consumption afterwards — charging measured usage when
-present and a conservative fallback (the reserved amount, never zero) when usage is
-``UNAVAILABLE``. Settlement is idempotent per ``invocation_id`` so a recovery replay
-never double-charges. Durable, DB-backed reconciliation is wired only in CP6; here the
-durability of "already settled" is carried by the caller's composition receipt.
+CP6 forbids the in-memory CP5 lifecycle as the production durable authority. This class
+is the production ``WorkerEnergyLifecycle``: it reverifies the reservation seeded from the
+approved scope before the provider call and settles consumption afterwards, idempotent per
+``invocation_id``. The DURABLE record of that settlement is a row in the ``energy_usage``
+table, written by the persistence mapper inside the same unit of work as WorkerRun and
+ExecutionEvidence — this object only computes the honest in-phase decision (recorded into
+the durable composition receipt). It is deliberately NOT an ``InMemoryEnergyLifecycle`` so
+the production composition root provably injects a durable-paired authority.
 """
 
 from __future__ import annotations
@@ -25,34 +26,32 @@ from ant_orchestrator.energy.settlement_math import compute_consumption
 
 
 @dataclass
-class _ReservationState:
+class _Reservation:
     reserved_tokens: int
-    valid: bool
+    valid: bool = True
 
 
-class InMemoryEnergyLifecycle:
-    """In-process reverify/settle ledger keyed by reservation reference."""
+class DurableEnergyLifecycle:
+    """Reverify/settle bound to the approved reservation; durable via the energy row."""
 
     def __init__(self) -> None:
-        self._reservations: dict[str, _ReservationState] = {}
+        self._reservations: dict[str, _Reservation] = {}
         self._settled: dict[str, EnergySettlement] = {}
 
-    # --- seeding (composition root / tests; CP6 replaces with a real ledger) ---
     def reserve(self, reservation_ref: str, reserved_tokens: int) -> None:
-        """Register a reservation reference with its reserved token amount."""
+        """Seed the reservation authority from the approved proposal/scope estimate."""
         if not reservation_ref:
             raise InvariantViolation("reservation_ref must be non-empty")
         if reserved_tokens < 0:
             raise InvariantViolation("reserved_tokens must be >= 0")
-        self._reservations[reservation_ref] = _ReservationState(reserved_tokens, valid=True)
+        self._reservations[reservation_ref] = _Reservation(reserved_tokens)
 
     def invalidate(self, reservation_ref: str) -> None:
-        """Mark a reservation no longer valid (e.g. expired or revoked)."""
+        """Mark a reservation no longer valid (expired/revoked)."""
         state = self._reservations.get(reservation_ref)
         if state is not None:
             state.valid = False
 
-    # --- lifecycle ---------------------------------------------------------
     def reverify(self, reservation_ref: str) -> EnergyReverifyResult:
         state = self._reservations.get(reservation_ref)
         if state is None:
@@ -70,18 +69,18 @@ class InMemoryEnergyLifecycle:
             raise InvariantViolation("invocation_id must be non-empty")
         existing = self._settled.get(invocation_id)
         if existing is not None:
-            return existing  # idempotent: never settle the same invocation twice
+            return existing  # idempotent per invocation: never double-charge
         state = self._reservations.get(reservation_ref)
         reserved = state.reserved_tokens if state is not None else 0
         actual, fallback = compute_consumption(usage, reserved)
         over_budget = actual > reserved
-        outcome = SettlementOutcome.OVER_BUDGET if over_budget else SettlementOutcome.SETTLED
-        reason = "conservative fallback" if fallback else "measured usage settled"
         settlement = EnergySettlement(
-            outcome=outcome,
+            outcome=SettlementOutcome.OVER_BUDGET if over_budget else SettlementOutcome.SETTLED,
             actual_tokens=actual,
             fallback_used=fallback,
-            reason="over budget" if over_budget else reason,
+            reason="over budget"
+            if over_budget
+            else ("conservative fallback" if fallback else "measured usage settled"),
             settlement_ref=invocation_id,
         )
         self._settled[invocation_id] = settlement
