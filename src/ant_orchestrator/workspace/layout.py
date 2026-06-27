@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Final
 
 ANT_DIRNAME: Final = ".ant"
+# System-managed artifact root (Phase 5 CP2) — context packages, before/proposed/diff
+# artifacts and journals live here, OUTSIDE any worker write scope.
+ARTIFACTS_DIRNAME: Final = "artifacts"
 MARKER_FILENAME: Final = "workspace.json"
 DATABASE_FILENAME: Final = "state.sqlite"
 # LangGraph durable checkpointer DB — a separate file from state.sqlite (Phase 4

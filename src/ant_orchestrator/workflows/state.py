@@ -52,6 +52,10 @@ class GraphState(TypedDict, total=False):
     phase: str
     plan: dict[str, object]
     context_ref: str
+    # Phase 5 CP2: prepared context bound off-graph (anti-TOCTOU). Both are JSON-safe
+    # references — the package reference and the manifest digest a proposal binds to.
+    context_package_ref: str
+    manifest_digest: str
     action_intent: dict[str, object]
     approval_intent: dict[str, object]
     approval_decision: dict[str, object] | None

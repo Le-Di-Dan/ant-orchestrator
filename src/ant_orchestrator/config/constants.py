@@ -56,9 +56,13 @@ TOKEN_ESTIMATION_DEFAULT_DIVISOR: Final = 4
 
 # Phase 4 workflow constants (CP2). Schema/topology versions are code constants;
 # the retry/regroup bounds are policy defaults (config-overridable in a later phase).
-GRAPH_STATE_SCHEMA_VERSION: Final = 1
-# Bumped to 2 in CP4: the topology gained the approval-interrupt path (prepare_intent
-# / await_approval / rejected / cancelled) and dropped the gate_blocked placeholder.
+# Phase 5 CP2 bumped 1→2: graph state now carries the prepared ``context_package_ref``
+# and ``manifest_digest`` (anti-TOCTOU binding). A pre-CP2 checkpoint lacks them, so it
+# must fail closed (GraphStateSchemaMismatch) instead of resuming without a digest.
+GRAPH_STATE_SCHEMA_VERSION: Final = 2
+# Topology unchanged in Phase 5 CP2 (no node/edge added); the definition bump 2→3 is
+# deferred to CP6 where execution semantics change. The state-schema bump above already
+# fail-closes every pre-CP2 checkpoint, so a second version axis here would be redundant.
 WORKFLOW_DEFINITION_VERSION: Final = 2
 WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1

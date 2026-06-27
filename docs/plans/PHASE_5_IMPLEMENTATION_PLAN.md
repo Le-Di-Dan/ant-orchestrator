@@ -427,3 +427,13 @@ Test Ant; retrieval nâng cao; semantic indexing / vector DB; tự động sửa
 3. `git diff` chỉ chứa planning document.
 4. Commit planning baseline **riêng**: `docs(plan): add phase 5 documentation ant implementation plan`.
 5. Sau commit: bắt đầu CP1 → CP8 theo thứ tự; mỗi CP chạy test bắt buộc + regression phù hợp + commit riêng; không cập nhật ROADMAP trước closure PASS.
+
+---
+
+## N. Append-only implementation notes (deviations)
+
+### CP2 (commit feat(context): immutable phase 5 context preparation)
+- **Vị trí ContextPreparationService**: tách 3 module thay vì 1 (`application/services/context_preparation.py` như §C liệt kê), do contract import-boundary: `application/services` **không** được import `ant_orchestrator.context`. Giải pháp: port `application/ports/context_preparation.py` (`ContextSourcePreparer` + DTO trả về ref/digest JSON-safe); impl `context/preparation.py` (`ContextSourcePreparerImpl` build+digest+persist); service `application/services/context_preparation.py` chỉ assemble `ExecutionProposal`. Không đổi scope/trust boundary/DoD — chỉ phân lớp DI cho đúng boundary.
+- **Quyết định version**: bump `GRAPH_STATE_SCHEMA_VERSION 1→2` (state mang `context_package_ref`+`manifest_digest`, anti-TOCTOU; checkpoint pre-CP2 fail-closed qua `GraphStateSchemaMismatch`). **Giữ** `WORKFLOW_DEFINITION_VERSION=2`, hoãn 2→3 tới CP6: CP2 không thêm node/edge (topology bất biến) và state-schema bump đã fail-close mọi checkpoint cũ → bump trục thứ hai là dư thừa. Không quyết định chỉ dựa trên topology; căn cứ là resumable semantic incompatibility đã được state-schema guard phủ.
+- **ContextPackageStore boundary**: nhận `artifacts_root: Path` đã resolve (composition root dựng `<workspace>/.ant/artifacts` từ `workspace.layout`), không import `workspace` (context-layer cấm). `context_package_ref` là path tương đối so với artifacts_root; verify chặn escape ngoài root (traversal/symlink) fail-closed.
+- **context_node**: promote `context_package_ref`+`manifest_digest` thật khi có (mirror vào `context_ref`, KHÔNG placeholder). Đường legacy không có prepared context (Phase-4 stub) giữ `ctx:` ref tạm — CP5/CP6 thay thế.

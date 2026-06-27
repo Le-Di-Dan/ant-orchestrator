@@ -61,7 +61,22 @@ def plan_node(state: Mapping[str, object]) -> dict[str, object]:
 
 
 def context_node(state: Mapping[str, object]) -> dict[str, object]:
-    """Produce a deterministic context reference for the current plan revision."""
+    """Promote prepared context references into canonical state (PHASE_5_PLAN CP2).
+
+    When context was prepared off-graph (anti-TOCTOU), ``context_package_ref`` and
+    ``manifest_digest`` are present: they are the authority and are mirrored into
+    ``context_ref`` (no placeholder). A run with no prepared context (the Phase-4
+    stub path, replaced in CP5/CP6) keeps the legacy deterministic reference.
+    """
+    ref = state.get("context_package_ref", "")
+    digest = state.get("manifest_digest", "")
+    if isinstance(ref, str) and ref and isinstance(digest, str) and digest:
+        return {
+            "context_ref": ref,
+            "context_package_ref": ref,
+            "manifest_digest": digest,
+            "phase": PHASE_EXECUTE,
+        }
     run_id = state.get("workflow_run_id", "")
     plan = state.get("plan", {})
     revision = plan.get("plan_revision", 0) if isinstance(plan, dict) else 0
