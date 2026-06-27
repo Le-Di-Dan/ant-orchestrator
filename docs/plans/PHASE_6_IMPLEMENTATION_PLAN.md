@@ -428,3 +428,42 @@ giữ nguyên). **Backend MVP chính thức = local Docker isolation.** **Không
 Các semantics lõi đã chốt trong kiến trúc: retry re-run đúng Test Ant; isolation enforce thật
 (ADR-0007); command profile không free-form; classification ↔ disposition (plain timeout không retry);
 terminal handoff mọi nhánh; energy delta không overcount. ⇒ sẵn sàng implementation từ CP1.
+
+---
+
+## O. Implementation deviation log (append-only)
+
+### CP1 — Taxonomy, classification/disposition & contracts (đã triển khai)
+
+Deviations nhỏ so với §E, có evidence repository (không đổi thiết kế tổng):
+
+1. **`FailureClassification` đặt ở `core/domain/test_failure.py`, KHÔNG ở `workers/test/classifier.py`.**
+   - *Plan expectation* (§E table): `FailureClassification` liệt kê trong `workers/test/classifier.py`.
+   - *Repository evidence*: CP1 cấm tạo classifier có I/O (prompt §5); model là pure domain (chỉ enum +
+     dataclass + invariant), và import-boundary test (`test_core_domain_is_infra_free`) bắt domain phải
+     infra-free. Đặt cạnh enum trong cùng module domain giữ cohesion và pass boundary.
+   - *Decision*: model thuần ở domain; `workers/test/classifier.py` (logic I/O) để lại đúng cho **CP3**.
+   - *Impact CP sau*: CP3 import `FailureClassification` từ `core.domain.test_failure` thay vì tự định nghĩa.
+
+2. **Thêm module `core/domain/test_failure_policy.py`** cho canonical category→(transience, disposition,
+   reason) policy + `default_classification()` + `cancellation_classification()`.
+   - *Plan expectation*: §E không nêu module policy riêng.
+   - *Repository evidence*: tách giữ `test_failure.py` ≤350 dòng (206) và cho phép exhaustive-mapping test
+     (fail khi thêm `FailureCategory` mà thiếu rule). Policy không cần `WorkerOutcome` nên ở được domain.
+   - *Impact CP sau*: CP3 classifier dùng `default_classification(category, …)` thay vì nhúng bảng policy.
+
+3. **`worker_outcome_for()` đặt trong `application/ports/test_execution.py`.**
+   - *Repository evidence*: mapping disposition→`WorkerOutcome` cần import `WorkerOutcome`
+     (`application/ports/worker.py`) nên KHÔNG đặt được ở domain; co-locate với `TestExecutionOutcome`.
+   - *Impact CP sau*: CP4 routing dùng `worker_outcome_for(disposition)` (exhaustive; `TERMINAL_CANCELLED`
+     raise — cancellation xử lý out-of-band, không route như worker failure).
+
+4. **Cancellation biểu diễn bằng disposition `TERMINAL_CANCELLED` + reason `EXECUTION_CANCELLED`** (qua
+   `cancellation_classification()`), KHÔNG thêm một `FailureCategory` cancellation.
+   - *Repository evidence*: cancellation không phải "failure"; taxonomy §E chỉ gồm 15 failure category.
+     Invariant fail-closed: `TERMINAL_CANCELLED` ⇒ reason `EXECUTION_CANCELLED`, không bao giờ TRANSIENT.
+   - *Impact CP sau*: CP4/CP6 map cancel → CANCELLED + terminal handoff, không qua `worker_outcome_for`.
+
+Tuân thủ: 5 file source mới đều ≤350 dòng; mypy strict `src` clean; ruff lint/format clean; 88 test CP1
+xanh + full suite 1474 passed/12 skipped (skip là live/container-gated có sẵn). Không Docker/subprocess/
+LangGraph/persistence/energy trong CP1. Không sửa ROADMAP. Phase 6 vẫn `NOT_STARTED` cho tới CP8.
