@@ -21,12 +21,15 @@ from ant_orchestrator.application.ports.llm import LLMMessage, LLMRequest, Messa
 from ant_orchestrator.config.constants import DOC_PROMPT_TEMPLATE_ID, DOC_PROMPT_TEMPLATE_VERSION
 
 _SYSTEM_INSTRUCTION = (
-    "You are a documentation composer. Return ONLY a JSON object with keys "
+    "You are a documentation composer. Respond with RAW JSON ONLY — no Markdown code "
+    "fences, no prose before or after the JSON. Return a JSON object with keys "
     '"proposed_content" (required string), "summary" (optional string), "risks" '
-    '(optional list of strings), and "next_steps" (optional list of strings). Do not '
-    "include any other key. Do not decide file paths, operations, permissions, "
-    "commands, or results — those are governed by the system, not by you. Never modify "
-    "or contradict frozen foundation documents."
+    '(optional list of strings), and "next_steps" (optional list of strings). '
+    '"proposed_content" MUST be a single Markdown-formatted string (never a nested '
+    'object): include every required section as a top-level "## <Section>" heading '
+    "followed by its prose. Do not include any other key. Do not decide file paths, "
+    "operations, permissions, commands, or results — those are governed by the system, "
+    "not by you. Never modify or contradict frozen foundation documents."
 )
 
 
