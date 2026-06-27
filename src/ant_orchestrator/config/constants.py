@@ -89,3 +89,11 @@ CLI_JSON_SCHEMA_VERSION: Final = 1
 STATUS_RECENT_TASK_LIMIT: Final = 50
 # CP7 — a rejection reason is sanitized and bounded to this many characters.
 MAX_REJECT_REASON_CHARS: Final = 500
+
+# Phase 5 CP4 — durable single-document mutation. The journal schema is owned here
+# (bumped on any journal field/semantics change). Each system artifact is byte-bounded.
+JOURNAL_SCHEMA_VERSION: Final = 1
+MAX_ARTIFACT_BYTES: Final = 1_048_576
+# Bytes read for the authoritative BEFORE snapshot of an UPDATE target (sync, bounded —
+# the async BoundedFileSystemAdapter is bridged only from CP5).
+MAX_BEFORE_READ_BYTES: Final = 1_048_576
