@@ -41,6 +41,13 @@ class DenyReason(Enum):
     NOT_A_FILE = "not_a_file"
     NOT_A_DIRECTORY = "not_a_directory"
     INVALID_PATH = "invalid_path"
+    # Phase 5 CP3 — protected-document + Windows fail-closed taxonomy.
+    PROTECTED_DOCUMENT = "protected_document"
+    UNSAFE_WINDOWS_PATH = "unsafe_windows_path"
+    PATH_CANONICALIZATION_FAILED = "path_canonicalization_failed"
+    UNSUPPORTED_POLICY_VERSION = "unsupported_policy_version"
+    UNSUPPORTED_OPERATION = "unsupported_operation"
+    INVALID_SCOPE = "invalid_scope"
 
 
 @dataclass(frozen=True, slots=True)
