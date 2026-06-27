@@ -72,12 +72,16 @@ class BeforeState:
 
 
 class ArtifactKind(Enum):
-    """The four system artifact kinds persisted per attempt."""
+    """System artifact kinds persisted per attempt (mutation + CP5 composition phase)."""
 
     BEFORE = "before"
     PROPOSED = "proposed"
     DIFF = "diff"
     JOURNAL = "journal"
+    # CP5 provider-phase artifacts live under a ``composition/`` subdir of the same
+    # attempt root so the single atomic writer/reader is reused, never duplicated.
+    COMPOSITION_DRAFT = "composition_draft"
+    COMPOSITION_RECEIPT = "composition_receipt"
 
 
 _FILENAMES: Final[dict[ArtifactKind, str]] = {
@@ -85,6 +89,8 @@ _FILENAMES: Final[dict[ArtifactKind, str]] = {
     ArtifactKind.PROPOSED: "proposed.txt",
     ArtifactKind.DIFF: "diff.patch",
     ArtifactKind.JOURNAL: "journal.json",
+    ArtifactKind.COMPOSITION_DRAFT: "composition/draft.json",
+    ArtifactKind.COMPOSITION_RECEIPT: "composition/receipt.json",
 }
 
 

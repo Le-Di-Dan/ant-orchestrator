@@ -68,6 +68,14 @@ class PersistedContext:
     manifest_digest: str
 
 
+@dataclass(frozen=True, slots=True)
+class LoadedSource:
+    """A verified context source (path + content) for a worker to ground on."""
+
+    path: str
+    content: str
+
+
 class ContextPackageStore:
     """Persists and verifies immutable context packages under the artifact root.
 
@@ -99,6 +107,12 @@ class ContextPackageStore:
 
     def verify(self, context_package_ref: str, expected_manifest_digest: str) -> None:
         """Fail closed unless the persisted package matches the expected digest exactly."""
+        self.load(context_package_ref, expected_manifest_digest)
+
+    def load(
+        self, context_package_ref: str, expected_manifest_digest: str
+    ) -> tuple[LoadedSource, ...]:
+        """Verify the package and return its sources; fail closed on any mismatch."""
         target = self._resolve(context_package_ref)
         if not target.is_dir():
             raise ContextPackageMissing("context package directory not found")
@@ -116,7 +130,7 @@ class ContextPackageStore:
             raise ContextArtifactCorrupt("persisted manifest digest is inconsistent")
         if stored_digest != expected_manifest_digest:
             raise ManifestDigestMismatch("context manifest digest does not match proposal")
-        self._verify_sources(target, canonical, artifact_files)
+        return self._verify_sources(target, canonical, artifact_files)
 
     # --- identity / paths ----------------------------------------------------
     @staticmethod
@@ -188,19 +202,26 @@ class ContextPackageStore:
 
     def _verify_sources(
         self, target: Path, canonical: dict[str, object], artifact_files: dict[str, object]
-    ) -> None:
+    ) -> tuple[LoadedSource, ...]:
         sources = canonical.get("sources")
         if not isinstance(sources, list):
             raise ContextArtifactCorrupt("context manifest sources are invalid")
+        loaded: list[LoadedSource] = []
         for entry in sources:
             path = entry.get("path") if isinstance(entry, dict) else None
             expected = entry.get("content_digest") if isinstance(entry, dict) else None
             rel = artifact_files.get(path) if isinstance(path, str) else None
-            if not isinstance(expected, str) or not isinstance(rel, str):
+            if (
+                not isinstance(path, str)
+                or not isinstance(expected, str)
+                or not isinstance(rel, str)
+            ):
                 raise ContextArtifactCorrupt("context source mapping is invalid")
             content = self._read_source(target, rel)
             if source_digest(content) != expected:
                 raise SourceDigestMismatch("context source content no longer matches digest")
+            loaded.append(LoadedSource(path=path, content=content))
+        return tuple(loaded)
 
     @staticmethod
     def _read_source(target: Path, rel: str) -> str:

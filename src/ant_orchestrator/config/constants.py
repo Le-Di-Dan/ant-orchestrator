@@ -97,3 +97,14 @@ MAX_ARTIFACT_BYTES: Final = 1_048_576
 # Bytes read for the authoritative BEFORE snapshot of an UPDATE target (sync, bounded —
 # the async BoundedFileSystemAdapter is bridged only from CP5).
 MAX_BEFORE_READ_BYTES: Final = 1_048_576
+
+# Phase 5 CP5 — Documentation Ant, provider-neutral composition, durable receipt.
+# The composition receipt schema is owned here (bumped on any field/semantics change).
+COMPOSITION_RECEIPT_SCHEMA_VERSION: Final = 1
+# Stable prompt template identity persisted into the receipt (never the prompt CONTENT).
+DOC_PROMPT_TEMPLATE_ID: Final = "documentation.compose"
+DOC_PROMPT_TEMPLATE_VERSION: Final = 1
+# Sanitized provider/model identifiers persisted into the receipt are bounded.
+MAX_PROVIDER_ID_CHARS: Final = 64
+# A raw model output larger than this is rejected before parsing (defence-in-depth).
+MAX_MODEL_OUTPUT_CHARS: Final = 400_000
