@@ -455,9 +455,14 @@ def test_update_symlink_target_unsafe(tmp_path: Path) -> None:
         pytest.skip("platform cannot create symlinks")
     (tmp_path / "docs/handoffs").mkdir(parents=True, exist_ok=True)
     (tmp_path / "real.md").write_text("# Summary\n\nreal", encoding="utf-8")
+    # The UPDATE target is a symlink whose resolved path escapes the write scope (a file at
+    # the workspace root). The permission/escape check rejects it BEFORE any mutation —
+    # fail closed, no write-through (in-scope symlinks are a separately-tested policy case).
     (tmp_path / _HANDOFF).symlink_to(tmp_path / "real.md")
     result = _mutator(tmp_path).execute(_request(operation=DocumentOperation.UPDATE))
-    assert result.outcome is MutationOutcome.TARGET_NOT_FILE
+    assert result.outcome is MutationOutcome.PERMISSION_DENIED
+    assert result.permission_reason == "outside_write_scope"
+    assert (tmp_path / "real.md").read_text(encoding="utf-8") == "# Summary\n\nreal"  # untouched
 
 
 # --- L. atomic durability --------------------------------------------------
