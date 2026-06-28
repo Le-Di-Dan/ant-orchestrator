@@ -285,8 +285,153 @@ Không có Docker gate trong GATES. Không có release script khác được can
 |---|---|
 | Completion report tồn tại | `docs/plans/PHASE_7_COMPLETION_REPORT.md` ✓ |
 | Gate 5/5 PASS | ruff-lint/ruff-format/mypy/file-size/pytest PASS ✓ |
-| Requirement matrix reconciled | 50/50 rows PASS ✓ |
-| Working tree clean sau CP9 commit | Pending commit |
+| Requirement matrix reconciled | 48/48 rows PASS ✓ |
+| Working tree clean sau CP9 commit | PASS — `git status` clean tại 4788b53 ✓ |
 | ROADMAP chưa được cập nhật | Đúng — ROADMAP closure thuộc CP10 ✓ |
 
-**CP10 chưa bắt đầu.**
+---
+
+## L. CP10 Closure Audit
+
+**Ngày audit**: 2026-06-29
+**Audited pre-closure HEAD**: `4788b53` — `docs(phase7): Phase 7 completion evidence and report`
+
+### L.1 Preflight
+
+| Hạng mục | Kết quả |
+|---|---|
+| Branch | `develop` ✓ |
+| HEAD | `4788b53` ✓ |
+| Working tree | clean ✓ |
+| CP0–CP9 chain | Tất cả 12 commit hash tồn tại, đúng subject, trên branch history ✓ |
+
+### L.2 Commit chain audit
+
+| CP | Hash | Subject | Tồn tại |
+|---|---|---|---|
+| CP0 | `5cb1273` | `feat(phase7-cp0): lock Phase 7 constants, audit event type, and ADR-0008` | ✓ |
+| CP1 | `df4e4ce` | `feat(phase7-cp1): add memory task scope and schema v4 migration` | ✓ |
+| CP2 | `0ac6675` | `feat(phase7-cp2): add deterministic memory retrieval query` | ✓ |
+| CP3 | `947db9a` | `feat(phase7-cp3): add memory and observability query services` | ✓ |
+| CP4 | `d6ec243` | `feat(phase7-cp4): add bounded memory context package support` | ✓ |
+| CP5 impl | `5bf3f1f` | `feat(phase7-cp5): wire memory retrieval into workflow context` | ✓ |
+| CP5 fix | `36ccecd` | `fix(phase7-cp5): close workflow memory integration quality gate` | ✓ |
+| CP6 | `07ea6fd` | `feat(phase7-cp6): CLI logs and memory search commands` | ✓ |
+| CP7 impl | `9430e5c` | `feat(phase7-cp7): FastAPI surface, WorkflowRun/WorkerRun endpoints, neutral composition root` | ✓ |
+| CP7 fix | `a0f617b` | `fix(phase7-cp7): complete FastAPI endpoint evidence` | ✓ |
+| CP8 | `1b9bdc3` | `test(phase7-cp8): three-level restart recovery evidence` | ✓ |
+| CP9 | `4788b53` | `docs(phase7): Phase 7 completion evidence and report` | ✓ |
+
+CP9 hash `4788b53` không xuất hiện trong Section B (report được tạo trước commit) — đây không phải blocker theo CP10 spec.
+
+### L.3 Requirement matrix reconciliation
+
+- Tổng rows trong Section D: **48**
+- Section K corrected: **48/48** (ban đầu ghi "50/50" — đã sửa bằng documentation correction trong CP10)
+- Mọi 48 rows: code path tồn tại, test file tồn tại, test function name đã verified
+- Không có mandatory behavior chỉ dựa vào code review (2 rows "Code review" là audit requirement hợp lệ: no production writer, single DTO)
+- Không có skipped mandatory test
+- Không có row trùng để che requirement thiếu
+
+**Các requirement đặc biệt đã xác minh**:
+- Migration v1→v4: `test_chain_v1_to_v4` tại `test_migration_v4.py:167` ✓
+- JSON1 fail-fast: `test_json1_check_failure_raises_storage_integrity_error` tại `test_migration_v4_repo.py:153` ✓
+- Tags ANY filter trước LIMIT: `test_completeness_sql_filter_before_limit` tại `test_phase7_memory_retrieval.py:180` ✓
+- Stable retrieval ordering: `test_ordering_newest_first` tại `test_phase7_memory_retrieval_order.py:55` ✓
+- Memory-context budget: `test_budget_selector_oversized_first_skipped_later_included` tại `test_phase7_context_memory_model.py:191` ✓
+- Digest order sensitivity: `test_entry_order_AB_differs_from_BA` tại `test_phase7_context_memory_store.py:147` ✓
+- Legacy package compatibility: `test_store_legacy_no_memory_package_still_works` tại `test_phase7_context_memory_store.py:256` ✓
+- Audit newest-first: `test_one_file_ten_events_limit_five_returns_newest` tại `test_jsonl_reader_core.py:84` ✓
+- CLI logs metadata: `test_json_has_more_true`, `test_json_payload_shape` tại `test_cli_phase7_logs.py` ✓
+- CLI memory filters: `test_type_filter`, `test_source_exact_case_sensitive`, `test_confidence_filter` tại `test_cli_phase7_memory.py` ✓
+- API WorkflowRun/WorkerRun separation: `test_worker_run_id_not_interchangeable_with_workflow_run_id` tại `test_phase7_api_runs.py:144` ✓
+- Worker-run energy: `test_get_worker_run_energy_visible` tại `test_phase7_api_runs.py:134` ✓
+- Threadpool execution: `run_in_threadpool` — baked into CP7 implementation (FastAPI blocking route) ✓
+- API error sanitization: `test_no_module_level_app_object` + import boundary test ✓
+- App isolation: `test_two_workspace_isolation` tại `test_phase7_api_runs.py:154` ✓
+- Three-level restart: `test_app_instance_restart_state_preserved`, `test_service_reinit_state_preserved`, `test_real_subprocess_restart_state_preserved` tại `test_phase7_restart.py` ✓
+- Duplicate WorkflowRun/Approval prevention: baseline count assertions trong `test_real_subprocess_restart_state_preserved` và `test_app_instance_restart_state_preserved` ✓
+- Audit continuity: `test_real_subprocess_audit_trail_continuous` tại `test_phase7_restart.py:272` ✓
+
+**Kết quả**: requirements = 48, PASS = 48, missing = 0, unsupported = 0.
+
+### L.4 CP9 source correction audit
+
+`git diff 1b9bdc3..4788b53 -- src/ant_orchestrator/api/errors.py`:
+
+```diff
+ async def handle_pydantic_validation_error(request: Request, exc: ValidationError) -> JSONResponse:
+-    return JSONResponse(status_code=422, content=_error_body("validation_error", str(exc.error_count())))
++    return JSONResponse(
++        status_code=422,
++        content=_error_body("validation_error", str(exc.error_count())),
++    )
+```
+
+Chỉ là formatting/line-wrapping (ruff E501). Không thay đổi status_code, content, behavior, hay error mapping. PASS.
+
+### L.5 Quality gate evidence
+
+CP9 gate (2026-06-29, exit 0):
+```
+ruff-lint:   PASS
+ruff-format: PASS
+mypy:        PASS
+file-size:   PASS
+pytest:      2051 passed, 15 skipped, 0 failed
+```
+
+GATES list trong `scripts/quality/gate.py`: 5 entries (ruff-lint/ruff-format/mypy/file-size/pytest). Không có Docker gate.
+
+### L.6 Security and artifact audit
+
+- Không có API key, bearer token, password, hay env dump thật trong repo
+- Không có runtime artifacts được track (`.ant/`, SQLite, JSONL audit logs)
+- Không có absolute local path trong completion report
+- Không có memory title/summary/content trong audit events
+- `git ls-files | grep -E "(\.env|\.db|\.sqlite|\.jsonl|__pycache__|\.ant)"` → không có match
+- "token" references: energy accounting (estimated_tokens) — không phải auth token
+- "secret" references: security constraint policy, redaction test fixtures — không phải secret thật
+- `FAKE_PEM` trong tests là clearly-labeled fake test data
+
+### L.7 Phase 7 scope audit
+
+**Delivered** (đúng canonical plan):
+- Memory schema v4, deterministic retrieval, memory-to-context integration
+- Logs/read/query services, CLI logs, CLI memory search
+- FastAPI surface, restart/recovery evidence, release validation
+
+**Deferred** (không claimed là delivered):
+- Production MemoryRecord writer, semantic/vector retrieval, adaptive scoring
+- Memory consolidation, authentication, streaming/SSE/WebSocket
+- Multi-tenant server, production Docker deployment evidence
+- Self-evolving roadmap, post-MVP Queen strategy migration
+
+Section J của completion report phản ánh đúng deferred items. Không có overclaim.
+
+### L.8 Docker/offline claim audit
+
+Completion report (Section G) nêu rõ: Docker không nằm trong mandatory GATES. Không claim "Docker deployment PASS". FastAPI tests dùng TestClient in-process ASGI. Level 3 subprocess là local Python interpreter. Không có network fixture trong mandatory suite (15 skipped = live/docker/optional). PASS.
+
+### L.9 git diff --check
+
+`git diff --check` → exit 0, không có trailing whitespace hay merge conflict markers.
+
+### L.10 Documentation correction
+
+Một correction được thực hiện trong CP10:
+- **Section K**: "50/50 rows" → "48/48 rows" (documentation typo, không ảnh hưởng requirement evidence)
+
+Không có implementation correction. Không có test correction.
+
+### L.11 ROADMAP trước closure
+
+Phase 7 status: `NOT_STARTED` (chưa được cập nhật tại CP9, đúng spec).
+
+---
+
+```
+PHASE 7 CLOSURE AUDIT: PASS
+```
+
+*(CP10 closure-audit commit hash sẽ được ghi vào ROADMAP sau khi commit này được tạo.)*
