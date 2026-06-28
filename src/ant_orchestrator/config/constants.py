@@ -147,3 +147,23 @@ TEST_EXECUTION_DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
 MAX_SNAPSHOT_FILES: Final = 5000
 MAX_SNAPSHOT_TOTAL_BYTES: Final = 67_108_864
 MAX_SNAPSHOT_FILE_BYTES: Final = 8_388_608
+
+# --- Phase 6 CP3: Test Ant worker, structured report & classifier ------------
+# Worker-kind tag for the Test Ant (mirrors DOC_WORKER_KIND; folded into identity).
+TEST_WORKER_KIND: Final = "test"
+# The structured test report schema is owned here (bumped on any field/semantics change).
+TEST_REPORT_SCHEMA_VERSION: Final = 1
+# Bounds on the sanitized, durable-facing StructuredTestReport (no raw output/host path).
+MAX_TEST_DIAGNOSTIC_HINT_CHARS: Final = 240
+MAX_TEST_FAILURE_EXCERPTS: Final = 8
+MAX_TEST_EXCERPT_CHARS: Final = 200
+MAX_TEST_EVIDENCE_REFS: Final = 16
+MAX_TEST_REPORT_TARGETS: Final = 64
+# Inner pytest acceptance-profile exit-code semantics (pure, profile-owned — never the
+# generic isolation port). See https://docs.pytest.org/en/stable/reference/exit-codes.html
+PYTEST_EXIT_OK: Final = 0
+PYTEST_EXIT_TESTS_FAILED: Final = 1
+PYTEST_EXIT_INTERRUPTED: Final = 2
+PYTEST_EXIT_INTERNAL_ERROR: Final = 3
+PYTEST_EXIT_USAGE_ERROR: Final = 4
+PYTEST_EXIT_NO_TESTS_COLLECTED: Final = 5

@@ -505,3 +505,62 @@ out writable, rootfs denied, non-root uid, `.git` không mount, network denied, 
 child-process contained, timeout kill container). Backend unavailable → fail-closed (no host fallback).
 Không LangGraph/persistence/energy/handoff/Test-Ant-worker trong CP2. Không sửa ROADMAP. Phase 6 vẫn
 `NOT_STARTED` cho tới CP8.
+
+### CP3 — Test Ant worker, structured report & classifier (đã triển khai)
+
+Deviations nhỏ so với §D.6/§E/§G, có evidence repository (không đổi thiết kế tổng):
+
+1. **Read-scope verification = exact-byte snapshot + manifest digest (CP2), KHÔNG dùng `ContextPackageStore`.**
+   - *Plan expectation* (§G CP3): "context qua `ContextPackageStore`+digest".
+   - *Repository evidence*: CP1 `TestExecutionScope` KHÔNG có `context_package_ref`/`manifest_digest` (chỉ
+     `canonical_read_scope`). `ContextPackageStore` phục vụ prepared-context của Documentation Ant, không
+     phải read-scope của Test Ant. Read-scope được xác thực bằng `ExecutionSnapshotBuilder.build()` +
+     `verify()` (per-file SHA-256 + aggregate digest, CP2) — đây chính là anti-TOCTOU verification.
+   - *Decision*: TestAnt KHÔNG nhận `ContextPackageStore`; snapshot provisioner build+verify read-scope và
+     trả `manifest_digest`. `files_read = canonical_read_scope`. Không phá public contract CP1/CP2.
+   - *Impact CP sau*: CP4 lắp một provisioner thật (builder + Docker `snapshot_root`); contract port giữ nguyên.
+
+2. **Report-level `TestResult` (PASSED/FAILED/ERROR/NO_TESTS) là enum mới ở `workers/test/report.py`.**
+   - *Plan expectation*: §G CP3 "reuse `TestOutcome`".
+   - *Repository evidence*: CP1 `TestOutcome` chỉ có PASSED/FAILED — không biểu diễn được ERROR/NO_TESTS mà
+     §D.6 yêu cầu. Tạo enum report-level riêng (đúng case §18 đã liệt kê), không sửa `TestOutcome` (Phase 2).
+   - *Impact CP sau*: CP5 persist report dùng `TestResult.value` (string ổn định).
+
+3. **Hai port nhỏ additive cho worker: `TestSnapshotProvisioner` + (optional) `TestOutputReader`.**
+   - *Repository evidence*: CP2 `IsolatedExecutionResult` cố ý KHÔNG surface stdout/stderr (output đi ra
+     out-mount). Để TestAnt không import builder/Docker cụ thể và không chạm host path, snapshot
+     build/verify/cleanup nằm sau `TestSnapshotProvisioner`; counts parse từ output đã bounded/redacted qua
+     `TestOutputReader` optional (vắng → counts=`unavailable`, result đứng trên exit/process facts).
+   - *Impact CP sau*: CP4 cấp provisioner Docker thật; output reader là hook tuỳ chọn.
+
+4. **`backend_reason` (transient/executable-missing/permission…) là fact allowlisted, không suy từ text.**
+   - *Repository evidence*: CP2 result chỉ có `status/exit_code/duration/evidence_refs`; không có reason ổn
+     định. Classifier nhận `BackendReason` typed (refine LAUNCH_FAILED/SETUP_FAILED). Vì CP2 chưa surface
+     reason, đường transient-retry được CHỨNG MINH ở classifier unit-level (facts injected); TestAnt qua CP2
+     map LAUNCH_FAILED→ISOLATION_SETUP_FAILURE (escalate), không bao giờ tự suy transient từ text.
+   - *Impact CP sau*: khi backend cấp reason allowlisted, fact-flow đã sẵn cho retry đúng CP1 invariant.
+
+5. **Orchestration order: capability TRƯỚC provision snapshot (fail-closed + tránh materialize thừa).**
+   - *Plan expectation* (prompt §2): snapshot (6/7) trước capability (8).
+   - *Repository evidence*: nếu backend unavailable thì không nên build snapshot. Đổi sang identity→resolve→
+     capability→provision→run→cleanup. Call-order có test khẳng định `["capability","provision","run","cleanup"]`.
+   - *Impact CP sau*: không ảnh hưởng contract; CP4 wiring giữ cùng thứ tự.
+
+6. **Cancellation: report `TERMINAL_CANCELLED` nhưng KHÔNG ép qua `worker_outcome_for` (intentionally raises).**
+   - Đúng deviation CP1 #4: `TestExecutionResult.cancelled=True`, `outcome=None`, `worker_report=None`;
+     report mang đầy đủ facet terminal-cancelled. Workflow CANCELLED out-of-band thuộc CP4/CP6.
+
+7. **Cleanup security-impact override**: cleanup `FAILED_SECURITY_IMPACT` biến một pass thành
+   `ISOLATION_VIOLATION` (terminal) — không để isolation resource còn tồn tại thành silent success (§12).
+   Plain cleanup failure (idempotent) không đổi kết quả.
+
+8. **Docker TestAnt integration (gated)**: pinned image (python) không chứa pytest → integration test SKIP
+   trên host hiện tại (docker/image/pytest-in-image probe). CP2 đã chứng minh enforcement matrix thật; CP3
+   chỉ xác nhận wiring + report host-path-free + cleanup. Đúng giới hạn §14 (không pull, không đổi pinning).
+
+Tuân thủ: 7 file source CP3 đều ≤350 dòng (max 273: `report.py`); mypy strict `src` clean (207 files); ruff
+lint/format clean; **173 phase6 test pass / 3 skip (Docker-gated)**, full suite **1585 passed / 13 skipped**;
+import/security boundary test khẳng định TestAnt không nhận mutator/Git/provider và worker package không
+import Docker backend/LangGraph/persistence/energy/subprocess. `files_changed=()`, `provider_invoked=False`.
+Không retry/regroup/escalation wiring, không node `test`, không bump definition, không persistence/energy,
+không sửa ROADMAP. Phase 6 vẫn `NOT_STARTED` cho tới CP8.
