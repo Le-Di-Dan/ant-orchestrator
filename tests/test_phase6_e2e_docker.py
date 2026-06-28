@@ -1,14 +1,17 @@
 """CP7 E2E Docker: real Docker integration with pytest-enabled fixture image.
 
-Builds a local test-only fixture image (python:3.11 + pytest from PyPI).
-Tests the full path: DurableTestExecution → TestAnt → ContainerIsolationBackend
-→ Docker container → structured outcome.
-Skipped when Docker is unavailable or the fixture image fails to build.
+Uses a pre-built local fixture image (ant-test-pytest-fixture:local) without
+rebuilding or pulling from the network. Tests the full path:
+DurableTestExecution → TestAnt → ContainerIsolationBackend → Docker container
+→ structured outcome.
+
+Skipped when Docker daemon is unavailable, the fixture image is absent, or
+pytest is not found in the image. Skips are distinct: each has a specific reason.
 
 CP7 deviation (§O): fixture image is test-only (ant-test-pytest-fixture:local).
-Production TEST_ISOLATION_IMAGE_ID is unchanged. Image is built via
-tests/docker/pytest_fixture/Dockerfile (pip install from PyPI; requires network
-at Docker build time). Wheel archives are not committed to the repository.
+Production TEST_ISOLATION_IMAGE_ID is unchanged. Wheel archives are not committed.
+Build the image once offline: docker build -t ant-test-pytest-fixture:local \\
+  tests/docker/pytest_fixture/  (requires network; run manually, not at test time).
 """
 
 from __future__ import annotations
@@ -56,7 +59,6 @@ from tests.support.cp7_e2e_harness import (
 from tests.support.fake_audit_sink import FakeAuditSink
 from tests.support.phase3_harness import TS
 
-_FIXTURE_DIR = Path(__file__).parent / "docker" / "pytest_fixture"
 _FIXTURE_TAG = "ant-test-pytest-fixture:local"
 _READ_SCOPE = ("tests",)
 _LOGICAL_ACTION_ID = f"{TASK_ID}-test"
@@ -73,24 +75,27 @@ def _run(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
 
 @pytest.fixture(scope="module")
 def docker_fixture_image():
-    """Build the pytest fixture image and return (docker_path, image_id).
+    """Locate the pre-built pytest fixture image and return (docker_path, image_id).
 
-    Skips if Docker is unavailable or build fails (including network failure).
-    The image is built via pip install from PyPI — requires network at build time.
+    Does NOT build or pull the image.  Three distinct skip reasons:
+    - Docker daemon unavailable on host.
+    - Fixture image absent (build once manually; see module docstring).
+    - pytest not executable inside the image.
     """
     docker = _docker()
     if docker is None:
-        pytest.skip("docker CLI not available on host")
-    build = _run([str(docker), "build", "-t", _FIXTURE_TAG, str(_FIXTURE_DIR)])
-    if build.returncode != 0:
-        pytest.skip(f"fixture image build failed: {build.stderr.decode()[:200]}")
+        pytest.skip("Docker daemon unavailable on host (docker CLI not found)")
     inspect = _run([str(docker), "image", "inspect", _FIXTURE_TAG, "--format", "{{.Id}}"])
     if inspect.returncode != 0:
-        pytest.skip("could not inspect fixture image")
+        pytest.skip(
+            f"Fixture image '{_FIXTURE_TAG}' not present locally. "
+            "Build it once offline: "
+            "docker build -t ant-test-pytest-fixture:local tests/docker/pytest_fixture/"
+        )
     image_id = inspect.stdout.decode().strip()
     probe = _run([str(docker), "run", "--rm", _FIXTURE_TAG, "python", "-m", "pytest", "--version"])
     if probe.returncode != 0:
-        pytest.skip("pytest not available inside the fixture image")
+        pytest.skip(f"pytest not executable in fixture image {image_id[:16]}")
     return docker, image_id
 
 
