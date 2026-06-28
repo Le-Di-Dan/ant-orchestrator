@@ -71,6 +71,7 @@ _ENERGY_USAGE_DDL = """CREATE TABLE energy_usage (
     tokens_in INTEGER NOT NULL CHECK (tokens_in >= 0),
     tokens_out INTEGER NOT NULL CHECK (tokens_out >= 0),
     created_at TEXT NOT NULL,
+    resource_amounts_json TEXT,
     CHECK (task_id IS NOT NULL OR worker_run_id IS NOT NULL)
 )"""
 
@@ -169,7 +170,15 @@ EXPECTED_SCHEMA: dict[str, frozenset[str]] = {
         {"id", "task_id", "status", "started_at", "finished_at", "created_at"}
     ),
     "energy_usage": frozenset(
-        {"id", "task_id", "worker_run_id", "tokens_in", "tokens_out", "created_at"}
+        {
+            "id",
+            "task_id",
+            "worker_run_id",
+            "tokens_in",
+            "tokens_out",
+            "created_at",
+            "resource_amounts_json",
+        }
     ),
     "workflow_checkpoints": frozenset(
         {"id", "task_id", "payload_version", "payload_json", "created_at"}

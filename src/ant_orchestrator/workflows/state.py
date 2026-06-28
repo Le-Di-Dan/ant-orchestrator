@@ -85,7 +85,8 @@ class GraphState(TypedDict, total=False):
     test_recovery_disposition: str | None  # RecoveryDisposition value
     test_attempt_ref: str | None  # stable attempt identity
     test_logical_action_ref: str | None  # stable logical action identity
-    test_evidence_refs: list[str]  # bounded sanitized references
+    test_evidence_refs: list[str]  # bounded sanitized references (CP5: includes evidence:<id>)
+    test_report_ref: str | None  # CP5: opaque ref to the authoritative evidence record
 
 
 _JSON_SCALARS = (str, int, float, bool)

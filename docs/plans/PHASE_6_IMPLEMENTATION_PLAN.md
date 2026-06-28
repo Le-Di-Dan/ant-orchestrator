@@ -597,3 +597,34 @@ lint/format clean; **47 CP4 test pass** (routing 18, invocation 8, context-bindi
 **all passed / skipped**; LangGraph chỉ nằm trong graph.py; worker không import Docker/LangGraph/persistence;
 graph layer không import Docker backend. Không persist report, không write energy, không handoff terminal,
 không sửa CompletionFinalizer, không sửa ROADMAP. `WORKFLOW_DEFINITION_VERSION` 3→4.
+
+### CP5 — Structured test evidence, delta energy, terminal handoff
+
+1. **`TerminalHandoffService` không import `integration.identity` (import boundary).**
+   - Spec gợi ý dùng `HandoffIdFactory` callable + lazy import. Import scanner (AST-level) vẫn phát hiện
+     lazy import bên trong function body → `test_import_boundary` fail.
+   - Fix: Inline SHA-256 `_terminal_handoff_id(run_id, final_outcome)` trong `application/services/terminal_handoff.py`
+     bằng cùng thuật toán (`"\x00".join(("terminal_handoff", run_id, final_outcome))`).
+   - Đồng nhất: cùng seed → cùng hex digest với `integration.identity.terminal_handoff_id`.
+
+2. **Migration v3 làm các test v2 regression fail (6 tests).**
+   - `SqliteDatabaseBootstrapper` bây giờ chạy v2 + v3 → `schema_version == 3`, không còn là 2.
+   - `test_migrate_v1_to_v2_is_ready`: Sau v2-only migration, `classify()` trả `CORRUPTED` (thiếu cột v3),
+     không phải `READY`. Sửa: chỉ assert `schema_version == 2`, bỏ classify assertion.
+   - `test_migration_on_fresh_v2_is_noop`: Bootstrap (→3) + v2 migrator (no-op) → version 3. Assert `== CODE_MAX_VERSION`.
+   - `test_migration_rejects_unsupported_version`: v3 đã valid → dùng version 999.
+   - `test_public_bootstrap_*`: Assert version `== CODE_MAX_VERSION` (3) thay vì `== 2`.
+   - `test_persistence_database::test_newer_version_is_incompatible`: Insert 999 thay vì 3.
+   - `test_application_init::test_init_incompatible_schema`: Insert 999 thay vì 3 (đã fix session trước).
+
+3. **`_V2_VERSION = 2` constant đặt giữa imports gây ruff E402.**
+   - Fix: Di chuyển `_V2_VERSION` và `_V1_VERSION` xuống sau tất cả imports.
+
+4. **`HandoffIdFactory` type alias và `handoff_id_factory` param đã bỏ.**
+   - `TerminalHandoffService.__init__` đơn giản hóa: không nhận `handoff_id_factory`.
+   - ID được tính bởi `_terminal_handoff_id()` inline, không cần dependency injection.
+
+Tuân thủ: 5 file source CP5 đều ≤350 dòng (max 258: `terminal_handoff.py`); mypy `src` clean (213 files);
+ruff lint/format clean; **40 CP5 tests pass** (evidence 15, energy 6, handoff 10, recovery 9); full suite
+**1672 passed / 15 skipped / 0 failed**; không persist raw output/traceback/path/secret; delta energy RETRIES=0/1;
+idempotent handoff by deterministic SHA-256 id; fail-closed on serialization/version error.

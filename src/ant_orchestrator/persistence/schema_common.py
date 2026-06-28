@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from enum import Enum
 
-CODE_MAX_VERSION = 2
+CODE_MAX_VERSION = 3
 MIGRATIONS_TABLE = "schema_migrations"
 
 

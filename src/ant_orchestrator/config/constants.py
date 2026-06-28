@@ -167,3 +167,13 @@ PYTEST_EXIT_INTERRUPTED: Final = 2
 PYTEST_EXIT_INTERNAL_ERROR: Final = 3
 PYTEST_EXIT_USAGE_ERROR: Final = 4
 PYTEST_EXIT_NO_TESTS_COLLECTED: Final = 5
+
+# --- Phase 6 CP5: structured test evidence, delta energy & terminal handoff ---
+# Test evidence envelope stored in execution_evidence.result (version 2 discriminates
+# from DocAnt evidence version 1).  Same MAX_EVIDENCE_ENVELOPE_BYTES limit applies.
+TEST_EVIDENCE_ENVELOPE_SCHEMA_VERSION: Final = 2
+# Terminal handoff JSON payload stored in handoff_records.what_changed.
+TERMINAL_HANDOFF_SCHEMA_VERSION: Final = 1
+MAX_TERMINAL_HANDOFF_BYTES: Final = 8_192
+MAX_HANDOFF_SUMMARY_CHARS: Final = 400
+MAX_HANDOFF_NEXT_STEPS_CHARS: Final = 400

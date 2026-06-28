@@ -173,6 +173,7 @@ class RunWorkflow:
             run_id,
             final_outcome=result.final_outcome,
             checkpoint_id=result.checkpoint_id,
+            state=result.final_state,
         )
 
     def _handle_existing_run(self, run: WorkflowRun) -> WorkflowOutcome:
@@ -207,6 +208,7 @@ class RunWorkflow:
                 run.id,
                 final_outcome=str(final_outcome_raw),
                 checkpoint_id=summary.checkpoint_id,
+                state=summary.values,
             )
 
         # No snapshot yet (empty graph thread) → crash #1: safe to re-invoke from START.

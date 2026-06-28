@@ -36,7 +36,7 @@ _WR_COLUMNS = "id, task_id, status, started_at, finished_at, created_at"
 _EV_COLUMNS = (
     "id, worker_run_id, files_read_json, files_changed_json, commands_json, result, created_at"
 )
-_EU_COLUMNS = "id, task_id, worker_run_id, tokens_in, tokens_out, created_at"
+_EU_COLUMNS = "id, task_id, worker_run_id, tokens_in, tokens_out, created_at, resource_amounts_json"
 
 
 class ConnWorkerRunRepository(ConnRepository):
@@ -97,7 +97,7 @@ class ConnEnergyUsageRepository(ConnRepository):
 
     def add(self, usage: EnergyUsage) -> None:
         self._conn.execute(
-            f"INSERT INTO energy_usage ({_EU_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO energy_usage ({_EU_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 usage.id.value,
                 usage.task_id.value if usage.task_id is not None else None,
@@ -105,6 +105,7 @@ class ConnEnergyUsageRepository(ConnRepository):
                 usage.tokens_in.value,
                 usage.tokens_out.value,
                 usage.created_at.to_iso(),
+                usage.resource_amounts_json,
             ),
         )
 
@@ -135,6 +136,8 @@ def _to_evidence(row: sqlite3.Row) -> ExecutionEvidence:
 def _to_energy_usage(row: sqlite3.Row) -> EnergyUsage:
     task_id = row["task_id"]
     worker_run_id = row["worker_run_id"]
+    keys = row.keys()
+    resource_json = row["resource_amounts_json"] if "resource_amounts_json" in keys else None
     return EnergyUsage(
         id=EnergyUsageId(row["id"]),
         tokens_in=TokenCount(row["tokens_in"]),
@@ -142,4 +145,5 @@ def _to_energy_usage(row: sqlite3.Row) -> EnergyUsage:
         created_at=UtcTimestamp.from_iso(row["created_at"]),
         task_id=TaskId(task_id) if task_id is not None else None,
         worker_run_id=WorkerRunId(worker_run_id) if worker_run_id is not None else None,
+        resource_amounts_json=resource_json,
     )

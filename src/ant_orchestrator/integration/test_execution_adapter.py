@@ -1,10 +1,9 @@
-"""Durable Test Ant execution adapter (PHASE_6_PLAN CP4, §4/§D.3/§E).
+"""Durable Test Ant execution adapter (PHASE_6_PLAN CP4/CP5, §4/§D.3/§E).
 
-Mirrors ``execution_adapter.py`` for the Test Ant: the single graph-facing seam that turns
-an approved workflow run into a durable, read-only Test Ant execution. The adapter owns the
-attempt lifecycle (create/reuse/settle), context binding, scope assembly, and compact outcome
-construction. It never retries, escalates, persists reports, writes energy, or creates a
-terminal handoff — those are CP5 responsibilities.
+The single graph-facing seam that turns an approved workflow run into a durable, read-only
+Test Ant execution.  CP4 owned the attempt lifecycle; CP5 adds structured test evidence
+persistence, per-attempt energy delta recording, and population of evidence refs in the
+compact outcome (so the graph state carries authoritative evidence pointers).
 
 Context binding (§2.1): the ``context_manifest_digest`` from GraphState binds the test scope
 to the approved workflow context. An optional ``expected_context_digest`` set at construction
@@ -14,6 +13,7 @@ time fails closed if the incoming digest differs (e.g., a corrupt or replayed st
 from __future__ import annotations
 
 import hashlib
+import time
 
 from ant_orchestrator.application.ports.test_execution import TestExecutionOutcome
 from ant_orchestrator.application.ports.test_worker import TestExecutionScope, TestTask
@@ -24,6 +24,7 @@ from ant_orchestrator.core.domain.test_failure import (
     RecoveryDisposition,
     TestReasonCode,
 )
+from ant_orchestrator.integration.test_evidence_persister import TestEvidencePersister
 from ant_orchestrator.workers.test.ant import TestAnt
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 
@@ -64,6 +65,7 @@ class DurableTestExecution:
         command_profile_key: str,
         isolation_ref: str | None = None,
         expected_context_digest: str = "",
+        evidence_persister: TestEvidencePersister | None = None,
     ) -> None:
         if not canonical_read_scope:
             raise InvariantViolation("DurableTestExecution.canonical_read_scope must be non-empty")
@@ -74,6 +76,7 @@ class DurableTestExecution:
         self._isolation_ref = isolation_ref
         self._expected_context_digest = expected_context_digest
         self._read_scope_digest = _scope_digest(canonical_read_scope)
+        self._evidence_persister = evidence_persister
 
     def execute(
         self,
@@ -116,10 +119,21 @@ class DurableTestExecution:
             command_key=self._command_profile_key,
         )
 
+        started_ms = time.monotonic_ns() // 1_000_000
         result = self._ant.execute(task, scope, run_id)
+        wall_time_ms = max(0, (time.monotonic_ns() // 1_000_000) - started_ms)
 
         if result.cancelled:
             # Cancellation is out-of-band (CP1 deviation §O #4). Do not settle as FAILED.
+            self._persist_evidence(
+                task_id=task_id,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                logical_action_id=logical_action_id,
+                report=result.structured_report,
+                wall_time_ms=wall_time_ms,
+                context_manifest_digest=context_manifest_digest,
+            )
             return TestExecutionOutcome(
                 outcome=WorkerOutcome.PERMANENT_FAILURE,
                 attempt_ref=attempt_id,
@@ -134,8 +148,61 @@ class DurableTestExecution:
             self._attempts.after_execute(attempt_id, WorkerOutcome.PERMANENT_FAILURE)
             return self._boundary_failure("missing_outcome")
 
+        evidence_refs = self._persist_evidence(
+            task_id=task_id,
+            run_id=run_id,
+            attempt_id=attempt_id,
+            logical_action_id=logical_action_id,
+            report=result.structured_report,
+            wall_time_ms=wall_time_ms,
+            context_manifest_digest=context_manifest_digest,
+        )
         self._attempts.after_execute(attempt_id, outcome.outcome)
-        return outcome
+        # Merge persisted evidence refs into the compact outcome.
+        merged_refs = tuple(outcome.evidence_refs) + tuple(evidence_refs)
+        from dataclasses import replace
+
+        return replace(outcome, evidence_refs=merged_refs)
+
+    def _persist_evidence(
+        self,
+        *,
+        task_id: str,
+        run_id: str,
+        attempt_id: str,
+        logical_action_id: str,
+        report: object,
+        wall_time_ms: int,
+        context_manifest_digest: str,
+    ) -> tuple[str, ...]:
+        """Persist structured evidence and energy; return opaque refs for state.
+
+        If no persister is injected (CP4 legacy mode) this is a no-op.
+        """
+        if self._evidence_persister is None:
+            return ()
+        from ant_orchestrator.workers.test.report import StructuredTestReport
+
+        if not isinstance(report, StructuredTestReport):
+            return ()
+        attempt_no = self._attempts.get_attempt_no(attempt_id)
+        # RETRIES=0 for initial attempt; RETRIES=1 for any retry (delta, not cumulative).
+        retry_delta = 0 if attempt_no <= 1 else 1
+        persisted = self._evidence_persister.persist(
+            task_id=task_id,
+            run_id=run_id,
+            attempt_id=attempt_id,
+            logical_action_id=logical_action_id,
+            report=report,
+            wall_time_ms=wall_time_ms,
+            retry_delta=retry_delta,
+            context_manifest_digest=context_manifest_digest,
+            read_scope_digest=self._read_scope_digest,
+        )
+        return (
+            f"worker_run:{persisted.worker_run_id}",
+            f"evidence:{persisted.evidence_id}",
+        )
 
     @staticmethod
     def _boundary_failure(detail: str) -> TestExecutionOutcome:

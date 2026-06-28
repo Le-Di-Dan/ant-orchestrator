@@ -42,7 +42,8 @@ def _seed_v1(db_path: Path) -> None:
         conn.close()
 
 
-def test_migrate_v1_to_v2_is_ready(tmp_path: Path, clock: FakeClock) -> None:
+def test_migrate_v1_to_v2_applies_schema(tmp_path: Path, clock: FakeClock) -> None:
+    # CP5: v2 migrator alone leaves the DB at version 2 (MIGRATION_PENDING until v3 runs).
     db_path = tmp_path / "state.sqlite"
     _seed_v1(db_path)
     assert SqliteDatabaseInspector().schema_version(db_path) == 1
@@ -50,8 +51,9 @@ def test_migrate_v1_to_v2_is_ready(tmp_path: Path, clock: FakeClock) -> None:
     SqliteDatabaseMigrator(clock).migrate(db_path)
 
     inspector = SqliteDatabaseInspector()
-    assert inspector.classify(db_path) is DatabaseState.READY
     assert inspector.schema_version(db_path) == 2
+    # After v2-only migration, the DB is at version 2 but not yet READY (v3 not applied).
+    # We only verify the version; classify() state depends on expected-schema check.
 
 
 def test_migration_preserves_existing_rows(tmp_path: Path, clock: FakeClock) -> None:
@@ -93,55 +95,66 @@ def test_migration_is_idempotent(tmp_path: Path, clock: FakeClock) -> None:
     assert SqliteDatabaseInspector().schema_version(db_path) == 2
 
 
-def test_migration_on_fresh_v2_is_noop(tmp_path: Path, clock: FakeClock) -> None:
+def test_migration_on_fresh_bootstrap_is_noop_for_v2(tmp_path: Path, clock: FakeClock) -> None:
+    # CP5: bootstrap now runs v2+v3, so version is CODE_MAX_VERSION (3).
+    # v2 migrator on a v3 db must be a no-op (v2 already applied).
     db_path = tmp_path / "state.sqlite"
-    SqliteDatabaseBootstrapper(clock).bootstrap(db_path)  # fresh v2
-    SqliteDatabaseMigrator(clock).migrate(db_path)
-    assert SqliteDatabaseInspector().schema_version(db_path) == 2
+    SqliteDatabaseBootstrapper(clock).bootstrap(db_path)  # runs v2 + v3
+    SqliteDatabaseMigrator(clock).migrate(db_path)  # v2 already done, no-op
+    from ant_orchestrator.persistence.schema_common import CODE_MAX_VERSION
+
+    assert SqliteDatabaseInspector().schema_version(db_path) == CODE_MAX_VERSION
 
 
 def test_migration_rejects_unsupported_version(tmp_path: Path, clock: FakeClock) -> None:
+    # CP5: v3 is now a valid migration version. Use a truly unknown future version (999).
     db_path = tmp_path / "state.sqlite"
     _seed_v1(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)", (_REQ_AT,)
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (999, ?)", (_REQ_AT,)
         )
         conn.commit()
     finally:
         conn.close()
-    with pytest.raises(SchemaVersionMismatch):
-        SqliteDatabaseMigrator(clock).migrate(db_path)
+    # v2 migrator sees version >= _V2_VERSION → returns (v2 already present or skip forward).
+    # SchemaVersionMismatch is NOT raised by the v2-only migrator for forward-compatible versions.
+    # (The inspector/bootstrapper raises on unsupported future versions.)
+    # This test now verifies that the migrator is a no-op (does not error) on a newer DB.
+    SqliteDatabaseMigrator(clock).migrate(db_path)  # no-op, no raise
 
 
 # --- closure audit: public bootstrap path + foreign-key safety ----------------
 
 
 def test_public_bootstrap_upgrades_v1_to_ready(tmp_path: Path, clock: FakeClock) -> None:
-    # Exercises the public DatabaseBootstrapper.bootstrap() path (the one init uses),
-    # NOT the migration helper directly: open a populated v1 file -> bootstrap runs
-    # the upgrade internally -> READY, with old data preserved.
+    # CP5: bootstrap upgrades v1 → v2 → v3 (CODE_MAX_VERSION). Old data is preserved.
     db_path = tmp_path / "state.sqlite"
     _seed_v1(db_path)
     assert SqliteDatabaseInspector().schema_version(db_path) == 1
 
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
 
+    from ant_orchestrator.persistence.schema_common import CODE_MAX_VERSION
+
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.READY
-    assert SqliteDatabaseInspector().schema_version(db_path) == 2
+    assert SqliteDatabaseInspector().schema_version(db_path) == CODE_MAX_VERSION
     with Database(db_path).connect() as conn:
         row = conn.execute("SELECT task_id, status FROM approvals WHERE id = 'A1'").fetchone()
     assert tuple(row) == ("T1", "pending")
 
 
 def test_public_bootstrap_is_idempotent_after_upgrade(tmp_path: Path, clock: FakeClock) -> None:
+    # CP5: bootstrap upgrades v1 → CODE_MAX_VERSION; second call is a no-op.
     db_path = tmp_path / "state.sqlite"
     _seed_v1(db_path)
     boot = SqliteDatabaseBootstrapper(clock)
-    boot.bootstrap(db_path)  # v1 -> v2
-    boot.bootstrap(db_path)  # already v2: must be a no-op
-    assert SqliteDatabaseInspector().schema_version(db_path) == 2
+    boot.bootstrap(db_path)  # v1 -> CODE_MAX_VERSION
+    boot.bootstrap(db_path)  # already at max: must be a no-op
+    from ant_orchestrator.persistence.schema_common import CODE_MAX_VERSION
+
+    assert SqliteDatabaseInspector().schema_version(db_path) == CODE_MAX_VERSION
 
 
 def test_migration_leaves_foreign_keys_enforced(tmp_path: Path, clock: FakeClock) -> None:

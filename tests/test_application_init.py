@@ -123,8 +123,8 @@ def test_init_incompatible_schema(
     service = _init_service(clock, id_gen)
     service.init(tmp_path)
     with sqlite3.connect(str(tmp_path / ANT_DIRNAME / "state.sqlite")) as conn:
-        # A version strictly newer than CODE_MAX_VERSION (now 2).
-        conn.execute(f"INSERT INTO {MIGRATIONS_TABLE} VALUES (3, '2026-06-22T00:00:00+00:00')")
+        # A version strictly newer than CODE_MAX_VERSION (now 3).
+        conn.execute(f"INSERT INTO {MIGRATIONS_TABLE} VALUES (999, '2026-06-22T00:00:00+00:00')")
     with pytest.raises(SchemaVersionMismatch):
         service.init(tmp_path)
 

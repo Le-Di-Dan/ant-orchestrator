@@ -17,12 +17,16 @@ from typing import Final
 from ant_orchestrator.config.constants import (
     DOC_WORKER_KIND,
     EVIDENCE_ENVELOPE_SCHEMA_VERSION,
+    TEST_WORKER_KIND,
 )
 
 __all__ = [
     "energy_settlement_id",
     "evidence_id",
     "invocation_id",
+    "terminal_handoff_id",
+    "test_energy_id",
+    "test_worker_run_id",
     "worker_run_id",
 ]
 
@@ -71,3 +75,18 @@ def evidence_id(
 def energy_settlement_id(invocation_id_value: str) -> str:
     """Deterministic ``EnergyUsageId`` keyed to the provider invocation (no re-charge)."""
     return _digest("energy_settlement", invocation_id_value)
+
+
+def test_worker_run_id(run_id: str, logical_action_id: str, attempt_id: str) -> str:
+    """Deterministic ``WorkerRunId`` for one Test Ant attempt (no proposal_digest)."""
+    return _digest("worker_run", run_id, logical_action_id, "", attempt_id, TEST_WORKER_KIND)
+
+
+def test_energy_id(run_id: str, attempt_id: str) -> str:
+    """Deterministic ``EnergyUsageId`` for one Test Ant attempt (no double-charge on replay)."""
+    return _digest("energy_test_run", run_id, attempt_id)
+
+
+def terminal_handoff_id(run_id: str, final_outcome: str) -> str:
+    """Deterministic ``HandoffId`` for one terminal workflow event (idempotent on replay)."""
+    return _digest("terminal_handoff", run_id, final_outcome)

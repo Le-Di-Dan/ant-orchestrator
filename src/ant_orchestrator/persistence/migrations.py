@@ -17,6 +17,7 @@ from ant_orchestrator.application.ports.database import (
 from ant_orchestrator.core.ports.clock import Clock
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migration_v2 import SqliteDatabaseMigrator
+from ant_orchestrator.persistence.migration_v3 import SqliteDatabaseMigratorV3
 from ant_orchestrator.persistence.schema import (
     CODE_MAX_VERSION,
     EXPECTED_SCHEMA,
@@ -100,11 +101,13 @@ class SqliteDatabaseBootstrapper:
 
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
-        self._migrator = SqliteDatabaseMigrator(clock)
+        self._migrator_v2 = SqliteDatabaseMigrator(clock)
+        self._migrator_v3 = SqliteDatabaseMigratorV3(clock)
 
     def bootstrap(self, db_path: Path) -> None:
         if self._inspect_for_bootstrap(db_path):
-            self._migrator.migrate(db_path)
+            self._migrator_v2.migrate(db_path)
+            self._migrator_v3.migrate(db_path)
 
     def _inspect_for_bootstrap(self, db_path: Path) -> bool:
         """Create a fresh schema if empty; return True iff an upgrade is required."""

@@ -17,7 +17,7 @@ from ant_orchestrator.application.ports.database import (
     StorageIntegrityError,
 )
 from ant_orchestrator.core.ports.clock import Clock
-from ant_orchestrator.persistence.schema_common import CODE_MAX_VERSION, MIGRATIONS_TABLE
+from ant_orchestrator.persistence.schema_common import MIGRATIONS_TABLE
 from ant_orchestrator.persistence.schema_workflow import (
     APPROVALS_V2_DDL,
     WORKFLOW_AUX_DDL,
@@ -26,6 +26,7 @@ from ant_orchestrator.persistence.schema_workflow import (
 )
 
 _V1_VERSION = 1
+_V2_VERSION = 2
 # v1 columns carried over verbatim into the rebuilt v2 approvals table.
 _APPROVAL_LEGACY_COLUMNS = "id, task_id, checkpoint_id, status, reason, requested_at, decided_at"
 # idx_appr_task is dropped with the legacy approvals table and must be recreated.
@@ -84,7 +85,7 @@ def _apply_v2(conn: sqlite3.Connection, applied_at: str) -> None:
         conn.execute(ddl)
     conn.execute(
         f"INSERT INTO {MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)",
-        (CODE_MAX_VERSION, applied_at),
+        (_V2_VERSION, applied_at),
     )
 
 
@@ -107,8 +108,8 @@ class SqliteDatabaseMigrator:
         version = _max_version(conn)
         if version is None:
             raise StorageIntegrityError("schema_migrations is empty; cannot migrate")
-        if version == CODE_MAX_VERSION:
-            return  # already at v2: idempotent no-op
+        if version >= _V2_VERSION:
+            return  # already at v2 or later: idempotent no-op
         if version != _V1_VERSION:
             raise SchemaVersionMismatch(f"cannot migrate from version {version} to v2")
         _require_v1_tables(conn)

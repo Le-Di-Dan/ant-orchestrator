@@ -46,7 +46,11 @@ _RESOLVED_APPROVAL_DECISIONS = (
 
 @dataclass(frozen=True, slots=True)
 class EnergyUsage:
-    """Recorded token usage; tied to a task and/or a worker run."""
+    """Recorded token/resource usage; tied to a task and/or a worker run.
+
+    CP5: ``resource_amounts_json`` carries Test Ant resource amounts (wall_time_ms, retries)
+    as a bounded JSON string.  ``None`` means DocAnt semantics (tokens only).
+    """
 
     id: EnergyUsageId
     tokens_in: TokenCount
@@ -54,6 +58,7 @@ class EnergyUsage:
     created_at: UtcTimestamp
     task_id: TaskId | None = None
     worker_run_id: WorkerRunId | None = None
+    resource_amounts_json: str | None = None
 
     def __post_init__(self) -> None:
         if self.task_id is None and self.worker_run_id is None:

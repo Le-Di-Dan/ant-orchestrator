@@ -91,6 +91,11 @@ class AttemptOrchestrator:
             attempt = uow.execution_attempts.get(ExecutionAttemptId(attempt_id))
             uow.execution_attempts.update(attempt.with_status(status, completed_at=now))
 
+    def get_attempt_no(self, attempt_id: str) -> int:
+        """Return the ``attempt_no`` for a known attempt (used by Test Ant energy delta)."""
+        with self._uow_factory() as uow:
+            return uow.execution_attempts.get(ExecutionAttemptId(attempt_id)).attempt_no
+
     @staticmethod
     def _is_stale(attempt: ExecutionAttempt, now: UtcTimestamp) -> bool:
         """Return True when a STARTED attempt's owner lease has expired."""

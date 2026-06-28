@@ -26,6 +26,14 @@ def _to_handoff(row: sqlite3.Row) -> HandoffRecord:
 class SqliteHandoffRepository(SqliteRepository):
     """Append-only persistence for handoff records."""
 
+    def find(self, handoff_id: HandoffId) -> HandoffRecord | None:
+        """Return the record if it exists, ``None`` otherwise (idempotency check)."""
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM handoff_records WHERE id = ?", (handoff_id.value,)
+            ).fetchone()
+        return _to_handoff(row) if row is not None else None
+
     def append(self, handoff: HandoffRecord) -> None:
         with self._db.transaction() as conn:
             conn.execute(
