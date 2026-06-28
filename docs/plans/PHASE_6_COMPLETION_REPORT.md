@@ -1,6 +1,6 @@
 # PHASE 6 — Completion Report
 
-> **Verdict**: **PHASE 6 COMPLETED — FULL MVP CANDIDATE** *(corrected; see §Q)*
+> **Verdict**: **PHASE 6 COMPLETED — FULL MVP CANDIDATE** *(corrected; see §Q and §R)*
 > **Status**: Full MVP Candidate — ready for Phase 7 gate.
 
 ---
@@ -12,7 +12,7 @@ real Docker container isolation, deterministic failure classification, classifie
 escalate with bounded budgets, structured evidence, delta energy, terminal handoff for every
 terminal outcome, and crash-recovery across three windows. Full MVP Candidate status is reached.
 
-Final verdict: **PHASE 6 COMPLETED — FULL MVP CANDIDATE** *(corrected; see §Q)*
+Final verdict: **PHASE 6 COMPLETED — FULL MVP CANDIDATE** *(corrected; see §Q and §R)*
 
 ---
 
@@ -575,11 +575,83 @@ All gates pass after `be2dbe5`:
 
 ---
 
+
+## R. Final Docker Closure Evidence
+
+### Why the previous correction was insufficient
+
+Commit `be2dbe5` changed the Dockerfile from local wheels to `pip install` from PyPI.
+This left the `docker_fixture_image` fixture triggering `docker build` (network) at
+test time. A network outage would produce a skip, not a real Docker result. Historical
+Docker PASS evidence was produced by the old wheel-based strategy, not by the
+`be2dbe5` code; it does not validate the current fixture.
+
+### Final offline fixture strategy (Phương án A)
+
+Commit `7a2711b` removes the `docker build` call from the fixture entirely.
+
+- `docker_fixture_image` inspects `ant-test-pytest-fixture:local` without rebuilding.
+- Returns the immutable image ID from `docker image inspect`.
+- Three distinct skip reasons: daemon unavailable / image absent / pytest absent.
+- No network used at test time.
+- The Dockerfile in `tests/docker/pytest_fixture/` is kept as a one-time setup
+  recipe (run manually; requires network; not triggered by tests).
+- Binary archives (`.whl`) are not committed.
+- Production `TEST_ISOLATION_IMAGE_ID` is unchanged.
+
+### Immutable fixture image identity
+
+| Field | Value |
+|-------|-------|
+| Tag | `ant-test-pytest-fixture:local` |
+| Image ID | `sha256:12be62b2de49f93da3bd7d3da1f855c70a0360e2efbe02514d3b961ec02fa543` |
+| Created | `2026-06-28T08:13:01Z` |
+| pytest | 9.1.1 |
+| Base | `python:3.11` (`sha256:9800957d...`) |
+
+### Real Docker E2E results on final fixture/code
+
+| Test | Result |
+|------|--------|
+| `test_docker_pass_e2e` | PASSED |
+| `test_docker_pass_report_is_success` | PASSED |
+| `test_docker_fail_e2e` | PASSED |
+| `test_capability_available_on_this_host` | PASSED |
+| `test_enforcement_invariants` | PASSED |
+| `test_child_process_is_contained` | PASSED |
+| `test_timeout_terminates_container` | PASSED |
+| `test_acceptance_pass_end_to_end` (test_ant_docker) | SKIP — pytest absent in production image (pre-existing) |
+| `test_acceptance_failure_end_to_end` (test_ant_docker) | SKIP — pytest absent in production image (pre-existing) |
+
+7 Docker tests PASSED. 2 pre-existing skips (production `python:3.11` image has no pytest;
+documented in CP3 §O as expected behavior).
+
+### Full suite after final correction
+
+| Metric | Value |
+|--------|-------|
+| Passed | 1786 |
+| Skipped | 15 |
+| Failed | 0 |
+| Docker real PASS | 7 |
+| Docker pre-existing skip | 2 |
+| Symlink skip (Windows host) | 9 (pre-existing) |
+
+### Correction commit chain
+
+| Commit | Action |
+|--------|--------|
+| `be2dbe5` | Removed wheel archives; switched Dockerfile to PyPI (network-dependent — insufficient) |
+| `7a2711b` | Removed `docker build` from fixture; offline immutable image strategy |
+| *(this commit)* | Final Docker closure evidence |
+
+---
+
 ## P. Closure Verdict
 
 Initial closure (`0818679`): `PHASE 6 CLOSURE AUDIT: PASS` — superseded by correction.
 
-Post-correction (`be2dbe5` + this commit):
+Post-correction (`be2dbe5` + `7a2711b` + this commit, with real Docker evidence in §R):
 
 ```
 PHASE 6 COMPLETED — FULL MVP CANDIDATE
