@@ -9,7 +9,6 @@ import pytest
 
 from ant_orchestrator.application.ports.database import (
     DatabaseState,
-    SchemaVersionMismatch,
 )
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migration_v2 import SqliteDatabaseMigrator

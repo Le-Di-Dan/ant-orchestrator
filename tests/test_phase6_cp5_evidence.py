@@ -14,6 +14,16 @@ from pathlib import Path
 
 import pytest
 
+from ant_orchestrator.core.domain.test_failure import (
+    FailureCategory,
+    RecoveryDisposition,
+    TestReasonCode,
+    Transience,
+)
+from ant_orchestrator.integration.errors import (
+    EvidencePersistenceConflict,
+    WorkerRunPersistenceConflict,
+)
 from ant_orchestrator.integration.test_evidence_envelope import (
     TestEvidenceEnvelope,
     TestEvidenceEnvelopeError,
@@ -22,20 +32,9 @@ from ant_orchestrator.integration.test_evidence_persister import (
     TestEvidencePersister,
     TestPersistenceOutcome,
 )
-from ant_orchestrator.integration import identity
-from ant_orchestrator.integration.errors import (
-    EvidencePersistenceConflict,
-    WorkerRunPersistenceConflict,
-)
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migrations import SqliteDatabaseBootstrapper
 from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
-from ant_orchestrator.core.domain.test_failure import (
-    FailureCategory,
-    RecoveryDisposition,
-    TestReasonCode,
-    Transience,
-)
 from ant_orchestrator.workers.test.provisioning import CleanupStatus
 from ant_orchestrator.workers.test.report import (
     StructuredTestReport,

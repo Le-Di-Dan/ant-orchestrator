@@ -20,7 +20,6 @@ from ant_orchestrator.application.services.terminal_handoff import (
     TerminalHandoffPayload,
     TerminalHandoffPayloadError,
 )
-from ant_orchestrator.config.constants import TERMINAL_HANDOFF_SCHEMA_VERSION
 from ant_orchestrator.integration.errors import EnergySettlementConflict
 from ant_orchestrator.integration.test_evidence_persister import TestEvidencePersister
 from ant_orchestrator.persistence.database import Database
@@ -216,7 +215,8 @@ def test_handoff_error_propagates_fail_closed(tmp_path: Path, clock: FakeClock) 
     from ant_orchestrator.core.domain.value_objects import WorkflowRunId
     from ant_orchestrator.persistence.repositories.handoff import SqliteHandoffRepository
     from tests.conftest import SequentialIdGenerator
-    from tests.support.cp4_helpers import add_task, create_running_run, uow_factory as _uow_f
+    from tests.support.cp4_helpers import add_task, create_running_run
+    from tests.support.cp4_helpers import uow_factory as _uow_f
 
     db = _make_db(tmp_path, clock)
     # Insert a RUNNING task + run so CompletionFinalizer can fetch them.
@@ -243,5 +243,10 @@ def test_handoff_error_propagates_fail_closed(tmp_path: Path, clock: FakeClock) 
             run_id,
             final_outcome="completed",
             checkpoint_id="cp-err",
-            state={"phase": "test", "retry_count": 0, "retry_extension_count": 0, "regroup_count": 0},
+            state={
+                "phase": "test",
+                "retry_count": 0,
+                "retry_extension_count": 0,
+                "regroup_count": 0,
+            },
         )

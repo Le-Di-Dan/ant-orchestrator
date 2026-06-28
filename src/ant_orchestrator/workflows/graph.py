@@ -86,8 +86,6 @@ def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, o
     delta.update(route)
     if gate_type is not None:
         action_intent = dict(state.get("action_intent") or {})
-        from ant_orchestrator.core.domain.enums import GateType
-
         mark_pending_gate(
             action_intent,
             gate_type=gate_type,  # type: ignore[arg-type]

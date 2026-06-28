@@ -19,7 +19,6 @@ import pytest
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.terminal_handoff import (
     TerminalHandoffPayload,
-    TerminalHandoffPayloadError,
     TerminalHandoffService,
 )
 from ant_orchestrator.config.constants import TERMINAL_HANDOFF_SCHEMA_VERSION
@@ -27,7 +26,6 @@ from ant_orchestrator.core.domain.value_objects import HandoffId
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migrations import SqliteDatabaseBootstrapper
 from ant_orchestrator.persistence.repositories.handoff import SqliteHandoffRepository
-from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
 from tests.conftest import FakeClock, SequentialIdGenerator
 from tests.support.cp4_helpers import uow_factory as _uow_factory_fn
 
@@ -225,9 +223,7 @@ def test_cancelled_handoff_includes_bounded_cancellation_info(
 # ---------------------------------------------------------------------------
 
 
-def test_finalizer_rejects_unknown_outcome(
-    tmp_path: Path, clock: FakeClock
-) -> None:
+def test_finalizer_rejects_unknown_outcome(tmp_path: Path, clock: FakeClock) -> None:
     from ant_orchestrator.application.errors import CheckpointRecoveryError
 
     db = _make_db(tmp_path, clock)

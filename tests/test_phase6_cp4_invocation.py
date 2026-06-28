@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from ant_orchestrator.application.ports.test_execution import (
     TestExecutionOutcome,
     TestExecutionPort,
@@ -36,7 +34,6 @@ from ant_orchestrator.workflows.decision_gate import DecisionGatePolicy
 from ant_orchestrator.workflows.runner import WorkflowRunner
 from ant_orchestrator.workflows.state import new_graph_state
 from ant_orchestrator.workspace.layout import CHECKPOINT_DB_FILENAME
-
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -122,9 +119,7 @@ def _fatal_outcome(attempt_ref: str) -> TestExecutionOutcome:
     )
 
 
-def _runner(
-    tmp_path: Path, worker: object, test_port: TestExecutionPort | None
-) -> WorkflowRunner:
+def _runner(tmp_path: Path, worker: object, test_port: TestExecutionPort | None) -> WorkflowRunner:
     return WorkflowRunner(
         worker=worker,  # type: ignore[arg-type]
         policy=DecisionGatePolicy(EnforcementPolicy()),
@@ -159,10 +154,12 @@ def test_happy_path_stub_worker_with_passing_test(tmp_path: Path) -> None:
 
 def test_transient_retry_test_ant_invoked_twice_stub_worker_once(tmp_path: Path) -> None:
     worker = _CountingWorker()
-    test_port = _ScriptedTestPort([
-        _transient_outcome("att-1"),
-        _success_outcome("att-2"),
-    ])
+    test_port = _ScriptedTestPort(
+        [
+            _transient_outcome("att-1"),
+            _success_outcome("att-2"),
+        ]
+    )
     result = _runner(tmp_path, worker, test_port).invoke(_state("R2"), thread_id="wf:R2")
     assert result.reached_end is True
     assert result.final_outcome == "completed"
@@ -214,11 +211,13 @@ def test_deterministic_failure_does_not_retry(tmp_path: Path) -> None:
 def test_retry_stops_at_base_limit(tmp_path: Path) -> None:
     worker = _CountingWorker()
     # 3 transients → budget (2) exhausted after 2 retries → RETRY_LIMIT gate at 3rd.
-    test_port = _ScriptedTestPort([
-        _transient_outcome("att-1"),
-        _transient_outcome("att-2"),
-        _transient_outcome("att-3"),
-    ])
+    test_port = _ScriptedTestPort(
+        [
+            _transient_outcome("att-1"),
+            _transient_outcome("att-2"),
+            _transient_outcome("att-3"),
+        ]
+    )
     result = _runner(tmp_path, worker, test_port).invoke(_state("R5"), thread_id="wf:R5")
     assert result.interrupt is not None  # RETRY_LIMIT gate
     # Only called twice (initial + 2 retries) before hitting the gate.
@@ -257,6 +256,7 @@ def test_legacy_mode_without_test_port_completes_normally(tmp_path: Path) -> Non
 def test_legacy_retry_routes_to_execute_not_test(tmp_path: Path) -> None:
     """In legacy mode (DocAnt retry), retryable routes back to execute_stub, not test."""
     from tests.support.scripted_worker import ScriptedStubAdapter
+
     worker = ScriptedStubAdapter([WorkerOutcome.RETRYABLE_FAILURE, WorkerOutcome.SUCCESS])
     result = _runner(tmp_path, worker, None).invoke(_state("R8"), thread_id="wf:R8")
     assert result.reached_end is True

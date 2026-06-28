@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from ant_orchestrator.core.domain.test_failure import (
     FailureCategory,
     RecoveryDisposition,

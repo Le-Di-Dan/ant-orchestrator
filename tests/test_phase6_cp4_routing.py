@@ -54,7 +54,8 @@ def test_retryable_budget_exhausted_escalates_to_retry_limit() -> None:
     # base_retry_limit=2, retry_count=2 → exhausted
     route = route_after_test_validation(_state(retry_count=2), "retryable")
     assert route["phase"] == PHASE_PREPARE_INTENT
-    from ant_orchestrator.core.domain.enums import GateType, ApprovalContinuation
+    from ant_orchestrator.core.domain.enums import ApprovalContinuation, GateType
+
     assert route["gate_type"] is GateType.RETRY_LIMIT
     assert route["continuation"] is ApprovalContinuation.EXECUTE
     assert "retry_count" not in route  # counter NOT incremented
@@ -73,7 +74,8 @@ def test_retryable_with_extension_still_retries() -> None:
 
 
 def test_escalate_routes_to_scope_change_gate() -> None:
-    from ant_orchestrator.core.domain.enums import GateType, ApprovalContinuation
+    from ant_orchestrator.core.domain.enums import ApprovalContinuation, GateType
+
     route = route_after_test_validation(_state(), "escalate")
     assert route["phase"] == PHASE_PREPARE_INTENT
     assert route["gate_type"] is GateType.SCOPE_CHANGE
@@ -117,6 +119,7 @@ def test_cancelled_routes_to_cancelled() -> None:
 
 def test_unknown_status_escalates_safely() -> None:
     from ant_orchestrator.core.domain.enums import GateType
+
     route = route_after_test_validation(_state(), "UNRECOGNIZED_STATUS_XYZ")
     assert route["phase"] == PHASE_PREPARE_INTENT
     assert route["gate_type"] is GateType.SCOPE_CHANGE
@@ -124,6 +127,7 @@ def test_unknown_status_escalates_safely() -> None:
 
 def test_empty_status_escalates_safely() -> None:
     from ant_orchestrator.core.domain.enums import GateType
+
     route = route_after_test_validation(_state(), "")
     assert route["phase"] == PHASE_PREPARE_INTENT
     assert route["gate_type"] is GateType.SCOPE_CHANGE

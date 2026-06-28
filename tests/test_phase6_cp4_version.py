@@ -13,14 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from ant_orchestrator.application.ports.workflow_runner import WorkflowDefinitionMismatch
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.state import (
     GRAPH_STATE_SCHEMA_VERSION,
     GraphState,
     new_graph_state,
 )
-from ant_orchestrator.application.ports.workflow_runner import WorkflowDefinitionMismatch
-
 
 # ---------------------------------------------------------------------------
 # Version constants
@@ -78,7 +77,11 @@ def test_version3_checkpoint_fails_closed_against_version4_graph(tmp_path: Path)
     WorkflowDefinitionMismatch. This is the correct test: the mechanism is the explicit
     call from the service, not inside runner.resume().
     """
-    from ant_orchestrator.application.ports.worker import WorkerActionIntent, WorkerExecutionResult, WorkerOutcome
+    from ant_orchestrator.application.ports.worker import (
+        WorkerActionIntent,
+        WorkerExecutionResult,
+        WorkerOutcome,
+    )
     from ant_orchestrator.energy.enforcement import EnforcementPolicy
     from ant_orchestrator.workflows.decision_gate import DecisionGatePolicy
     from ant_orchestrator.workflows.runner import WorkflowRunner
@@ -123,7 +126,11 @@ def test_existing_fields_not_broken_by_new_cp4_fields() -> None:
 def test_is_cancelled_property_true_for_terminal_cancelled() -> None:
     from ant_orchestrator.application.ports.test_execution import TestExecutionOutcome
     from ant_orchestrator.application.ports.worker import WorkerOutcome
-    from ant_orchestrator.core.domain.test_failure import FailureCategory, RecoveryDisposition, TestReasonCode
+    from ant_orchestrator.core.domain.test_failure import (
+        FailureCategory,
+        RecoveryDisposition,
+        TestReasonCode,
+    )
 
     outcome = TestExecutionOutcome(
         outcome=WorkerOutcome.PERMANENT_FAILURE,
@@ -138,7 +145,11 @@ def test_is_cancelled_property_true_for_terminal_cancelled() -> None:
 def test_is_cancelled_property_false_for_terminal_failed() -> None:
     from ant_orchestrator.application.ports.test_execution import TestExecutionOutcome
     from ant_orchestrator.application.ports.worker import WorkerOutcome
-    from ant_orchestrator.core.domain.test_failure import FailureCategory, RecoveryDisposition, TestReasonCode
+    from ant_orchestrator.core.domain.test_failure import (
+        FailureCategory,
+        RecoveryDisposition,
+        TestReasonCode,
+    )
 
     outcome = TestExecutionOutcome(
         outcome=WorkerOutcome.PERMANENT_FAILURE,
