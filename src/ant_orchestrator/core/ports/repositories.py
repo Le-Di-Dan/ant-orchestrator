@@ -12,6 +12,7 @@ from typing import Protocol
 
 from ant_orchestrator.core.domain.entities import Task, WorkerRun
 from ant_orchestrator.core.domain.enums import MemoryType, TaskStatus, WorkflowRunStatus
+from ant_orchestrator.core.domain.query import MemorySearchCriteria
 from ant_orchestrator.core.domain.records import (
     Approval,
     EnergyUsage,
@@ -188,9 +189,10 @@ class PheromoneRepository(Protocol):
 
 
 class MemoryRepository(Protocol):
-    """Persistence for memory records (append/read/deprecate; no retrieval)."""
+    """Persistence for memory records (append/read/deprecate/search)."""
 
     def append(self, memory: MemoryRecord) -> None: ...
     def get(self, memory_id: MemoryId) -> MemoryRecord: ...
     def deprecate(self, memory: MemoryRecord) -> None: ...
     def list_by_type(self, memory_type: MemoryType) -> Sequence[MemoryRecord]: ...
+    def search(self, criteria: MemorySearchCriteria) -> Sequence[MemoryRecord]: ...
