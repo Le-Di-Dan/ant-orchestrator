@@ -17,6 +17,7 @@ from ant_orchestrator.application.ports.context_preparation import (
 )
 from ant_orchestrator.application.ports.document_worker import DocumentationTask
 from ant_orchestrator.application.ports.execution_scope import ExecutionProposal
+from ant_orchestrator.core.domain.query import MemorySearchCriteria
 from ant_orchestrator.core.domain.value_objects import TokenCount
 
 
@@ -36,6 +37,7 @@ class ProposalDraftInput:
     consumer: ContextConsumer
     budget: ContextBudget
     excluded: tuple[str, ...] = ()
+    memory_criteria: MemorySearchCriteria | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +64,7 @@ class ContextPreparationService:
                 approved_inputs=request.task.approved_inputs,
                 budget=request.budget,
                 excluded=request.excluded,
+                memory_criteria=request.memory_criteria,
             )
         )
         proposal = ExecutionProposal(

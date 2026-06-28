@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from ant_orchestrator.application.ports.context_builder import ContextBudget, ContextConsumer
+from ant_orchestrator.core.domain.query import MemorySearchCriteria
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,7 @@ class ContextPreparationInput:
     approved_inputs: tuple[str, ...]
     budget: ContextBudget
     excluded: tuple[str, ...] = ()
+    memory_criteria: MemorySearchCriteria | None = None
 
 
 @dataclass(frozen=True, slots=True)

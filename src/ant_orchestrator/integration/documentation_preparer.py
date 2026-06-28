@@ -23,9 +23,10 @@ from ant_orchestrator.application.services.context_preparation import (
     ContextPreparationService,
     ProposalDraftInput,
 )
-from ant_orchestrator.config.constants import DEFAULT_TIMEOUT_SECONDS
+from ant_orchestrator.config.constants import DEFAULT_TIMEOUT_SECONDS, MEMORY_DEFAULT_LIMIT
 from ant_orchestrator.core.domain.entities import Task
-from ant_orchestrator.core.domain.value_objects import TokenCount
+from ant_orchestrator.core.domain.query import MemorySearchCriteria
+from ant_orchestrator.core.domain.value_objects import TaskId, TokenCount
 from ant_orchestrator.infrastructure.async_bridge import AsyncDependencyRunner
 from ant_orchestrator.integration.proposal_store import ProposalStore
 
@@ -90,11 +91,20 @@ class DocumentationPreparer:
         request = self._request_factory(task)
         if request is None:
             return None
-        prepared = self.prepare(run_id, request)
+        prepared = self.prepare(run_id, request, task_id=task.id)
         return {**prepared.state_fields, "action_intent": prepared.action_intent}
 
-    def prepare(self, run_id: str, request: DocumentationRequest) -> PreparedDocumentation:
+    def prepare(
+        self,
+        run_id: str,
+        request: DocumentationRequest,
+        *,
+        task_id: TaskId | None = None,
+    ) -> PreparedDocumentation:
         """Build + persist the proposal/context; fail closed on a scope/identity violation."""
+        memory_criteria: MemorySearchCriteria | None = None
+        if task_id is not None:
+            memory_criteria = MemorySearchCriteria(task_id=task_id, limit=MEMORY_DEFAULT_LIMIT)
         task = DocumentationTask(
             logical_action_id=request.logical_action_id,
             operation=request.operation,
@@ -115,6 +125,7 @@ class DocumentationPreparer:
             proposal_version=request.proposal_version,
             consumer=self._consumer,
             budget=self._budget,
+            memory_criteria=memory_criteria,
         )
         prepared = self._runner.run(lambda: self._context.prepare(draft), timeout=self._timeout)
         stored = self._proposals.persist(run_id, request.logical_action_id, prepared.proposal, task)
