@@ -445,10 +445,11 @@ Test Ant; retrieval nâng cao; sửa document protected.
 
 **Trạng thái**: `COMPLETED`
 
-> Completion report: `docs/plans/PHASE_6_COMPLETION_REPORT.md` (commit `0818679`).
-> Closure audit: **PASS** — 1786 passed / 15 skipped / 0 failed.
+> Completion report: `docs/plans/PHASE_6_COMPLETION_REPORT.md` (initial `0818679`; corrected `656520e`).
+> Closure correction: `be2dbe5` — `graph.py` 319 lines (was 361); wheel archives removed from git.
+> Verdict: **PHASE 6 COMPLETED — FULL MVP CANDIDATE** — 1779 passed / 13 skipped / 0 failed.
 > Commit chain: CP1 `6f4c171` → CP2 `280b2b5` → CP3 `fc91215` → CP4 `3d567b4` → CP5 `035b5fa`
-> → CP6 `adf20eb` → CP6-correction `e744eba` → CP7 `f7a0967`.
+> → CP6 `adf20eb` → CP6-correction `e744eba` → CP7 `f7a0967` → closure-correction `be2dbe5`.
 
 #### Mục tiêu
 Hoàn tất vòng lặp MVP với cả hai worker frozen — **Full MVP Candidate**.
