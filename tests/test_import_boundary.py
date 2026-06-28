@@ -268,7 +268,8 @@ def test_application_energy_port_no_implementation() -> None:
 
 def test_audit_sink_adapter_not_imported_by_inner_layers() -> None:
     sink = "ant_orchestrator.adapters.jsonl_audit_sink"
-    outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli")
+    # api/ and cli/ are edge layers: they are permitted to wire concrete adapters.
+    outer = (PKG_ROOT / "adapters", PKG_ROOT / "cli", PKG_ROOT / "api")
     for file in PKG_ROOT.rglob("*.py"):
         if any(file.is_relative_to(directory) for directory in outer):
             continue

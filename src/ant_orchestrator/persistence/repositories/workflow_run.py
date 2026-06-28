@@ -1,7 +1,8 @@
-"""Connection-bound WorkflowRunRepository (PHASE_4_PLAN E.1).
+"""Connection-bound WorkflowRunRepository and standalone read adapter (PHASE_4_PLAN E.1).
 
-Bound to a unit-of-work connection; the single-active-run-per-task invariant is
-enforced by the ``ux_run_active_task`` partial-unique index, not by application code.
+``WorkflowRunRepository`` is connection-bound (UoW only).
+``SqliteWorkflowRunReadRepository`` is the standalone read-only adapter used by
+``GetTaskDetail`` and ``GetWorkflowRunDetail`` without a transaction context.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import sqlite3
 from ant_orchestrator.core.domain.enums import WorkflowRunStatus
 from ant_orchestrator.core.domain.value_objects import TaskId, UtcTimestamp, WorkflowRunId
 from ant_orchestrator.core.domain.workflow import WorkflowRun
-from ant_orchestrator.persistence.repositories.base import ConnRepository
+from ant_orchestrator.persistence.repositories.base import ConnRepository, SqliteRepository
 from ant_orchestrator.persistence.serialization import iso_or_none, parse_iso_or_none
 
 _COLUMNS = (
@@ -115,3 +116,28 @@ class WorkflowRunRepository(ConnRepository):
             ),
         )
         return cursor.rowcount > 0
+
+
+class SqliteWorkflowRunReadRepository(SqliteRepository):
+    """Standalone read-only workflow-run adapter (no UoW binding, transaction-per-op)."""
+
+    def get(self, run_id: WorkflowRunId) -> WorkflowRun:
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM workflow_runs WHERE id = ?", (run_id.value,)
+            ).fetchone()
+        if row is None:
+            raise self._missing("WorkflowRun", run_id.value)
+        return _to_run(row)
+
+    def find_active_by_task(self, task_id: TaskId) -> WorkflowRun | None:
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM workflow_runs WHERE task_id = ? AND status IN (?, ?)",
+                (
+                    task_id.value,
+                    WorkflowRunStatus.RUNNING.value,
+                    WorkflowRunStatus.AWAITING_APPROVAL.value,
+                ),
+            ).fetchone()
+        return _to_run(row) if row is not None else None

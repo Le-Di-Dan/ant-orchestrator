@@ -19,6 +19,10 @@ dependencies = [
     # untested releases. Used only in workflows/ (see import-boundary tests).
     "langgraph>=1.2.6,<1.3",
     "langgraph-checkpoint-sqlite>=3.0.1,<4",
+    # FastAPI surface (Phase 7 CP7). httpx provides TestClient via starlette[full].
+    "fastapi>=0.115,<0.116",
+    "uvicorn>=0.32,<0.33",
+    "httpx>=0.28,<1.0",
 ]
 
 [project.optional-dependencies]

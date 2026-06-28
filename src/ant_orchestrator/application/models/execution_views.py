@@ -79,6 +79,19 @@ class EvidenceSummaryView:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowRunDetailView:
+    """Full observable detail for one workflow run (CP7 read model)."""
+
+    workflow_run_id: str
+    task_id: str
+    status: str
+    workflow_definition_version: int
+    created_at: str
+    updated_at: str
+    cancel_requested: bool
+
+
+@dataclass(frozen=True, slots=True)
 class WorkerRunDetailView:
     """Full observable detail for one worker run (CP3 read model)."""
 

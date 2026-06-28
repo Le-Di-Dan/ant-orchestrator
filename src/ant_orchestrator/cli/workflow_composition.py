@@ -15,7 +15,7 @@ from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
     WorkflowDocumentationPreparer,
 )
-from ant_orchestrator.cli.composition import SystemClock
+from ant_orchestrator.composition import SystemClock
 from ant_orchestrator.composition import (  # noqa: F401
     WorkflowServices as WorkflowServices,
 )
