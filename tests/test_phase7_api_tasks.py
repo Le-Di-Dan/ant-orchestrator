@@ -146,6 +146,23 @@ def test_get_task_worker_runs_visible_after_run(client: TestClient) -> None:
     assert isinstance(worker_runs, list)
 
 
+def test_run_workflow_uses_threadpool(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import ant_orchestrator.api.routes.tasks as tasks_module
+
+    call_log: list[str] = []
+    original_rtp = tasks_module.run_in_threadpool
+
+    async def spy(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        call_log.append(getattr(func, "__name__", repr(func)))
+        return await original_rtp(func, *args, **kwargs)
+
+    monkeypatch.setattr(tasks_module, "run_in_threadpool", spy)
+    task_id = client.post("/tasks", json={"title": "Threadpool check"}).json()["task_id"]
+    resp = client.post(f"/tasks/{task_id}/workflow-runs")
+    assert resp.status_code == 200
+    assert "execute" in call_log
+
+
 def test_get_task_approval_visible(client: TestClient) -> None:
     task_id = client.post("/tasks", json={"title": "Approval check"}).json()["task_id"]
     run_resp = client.post(f"/tasks/{task_id}/workflow-runs").json()

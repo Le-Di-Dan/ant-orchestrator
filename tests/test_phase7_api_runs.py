@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,20 @@ from typer.testing import CliRunner
 
 from ant_orchestrator.api.main import create_app
 from ant_orchestrator.cli.main import app as cli_app
+from ant_orchestrator.core.domain.entities import WorkerRun
+from ant_orchestrator.core.domain.enums import WorkerRunStatus
+from ant_orchestrator.core.domain.records import EnergyUsage
+from ant_orchestrator.core.domain.value_objects import (
+    EnergyUsageId,
+    TaskId,
+    TokenCount,
+    UtcTimestamp,
+    WorkerRunId,
+)
+from ant_orchestrator.persistence.database import Database
+from ant_orchestrator.persistence.repositories.energy_usage import SqliteEnergyUsageRepository
+from ant_orchestrator.persistence.repositories.worker_run import SqliteWorkerRunRepository
+from ant_orchestrator.workspace.layout import ANT_DIRNAME, DATABASE_FILENAME
 
 
 @pytest.fixture
@@ -31,6 +47,32 @@ def _seed_task_and_run(client: TestClient, title: str = "Demo") -> dict:
     task_id = client.post("/tasks", json={"title": title}).json()["task_id"]
     run = client.post(f"/tasks/{task_id}/workflow-runs").json()
     return {"task_id": task_id, "run": run}
+
+
+def _seed_worker_run_direct(workspace: Path, task_id: str) -> str:
+    """Seed a WorkerRun and EnergyUsage directly via repositories; return worker_run_id."""
+    db = Database(workspace / ANT_DIRNAME / DATABASE_FILENAME)
+    now = UtcTimestamp(datetime.now(UTC))
+    worker_run_id = str(uuid.uuid4())
+    worker_run = WorkerRun(
+        id=WorkerRunId(worker_run_id),
+        task_id=TaskId(task_id),
+        status=WorkerRunStatus.SUCCEEDED,
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+    )
+    SqliteWorkerRunRepository(db).add(worker_run)
+    energy = EnergyUsage(
+        id=EnergyUsageId(str(uuid.uuid4())),
+        tokens_in=TokenCount(42),
+        tokens_out=TokenCount(17),
+        created_at=now,
+        task_id=TaskId(task_id),
+        worker_run_id=WorkerRunId(worker_run_id),
+    )
+    SqliteEnergyUsageRepository(db).append(energy)
+    return worker_run_id
 
 
 # --- GET /workflow-runs/{workflow_run_id} ---
@@ -69,21 +111,18 @@ def test_get_workflow_run_no_graph_state_leak(client: TestClient) -> None:
 # --- GET /worker-runs/{worker_run_id} ---
 
 
-def test_get_worker_run_success(client: TestClient) -> None:
-    info = _seed_task_and_run(client)
-    task_id = info["task_id"]
-    detail = client.get(f"/tasks/{task_id}").json()
-    if not detail["worker_runs"]:
-        pytest.skip("no worker run created by stub (approval interrupt)")
-    wr_id = detail["worker_runs"][0]["worker_run_id"]
+def test_get_worker_run_success(client: TestClient, workspace: Path) -> None:
+    task_id = client.post("/tasks", json={"title": "WorkerRun seed"}).json()["task_id"]
+    wr_id = _seed_worker_run_direct(workspace, task_id)
     resp = client.get(f"/worker-runs/{wr_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert data["worker_run_id"] == wr_id
     assert data["task_id"] == task_id
+    assert data["status"] == "succeeded"
+    assert "created_at" in data
     assert "energy" in data
     assert "evidence" in data
-    assert "status" in data
 
 
 def test_get_worker_run_missing_404(client: TestClient) -> None:
@@ -92,18 +131,14 @@ def test_get_worker_run_missing_404(client: TestClient) -> None:
     assert "error" in resp.json()
 
 
-def test_get_worker_run_energy_visible(client: TestClient) -> None:
-    info = _seed_task_and_run(client)
-    task_id = info["task_id"]
-    detail = client.get(f"/tasks/{task_id}").json()
-    if not detail["worker_runs"]:
-        pytest.skip("no worker run created")
-    wr_id = detail["worker_runs"][0]["worker_run_id"]
+def test_get_worker_run_energy_visible(client: TestClient, workspace: Path) -> None:
+    task_id = client.post("/tasks", json={"title": "Energy seed"}).json()["task_id"]
+    wr_id = _seed_worker_run_direct(workspace, task_id)
     data = client.get(f"/worker-runs/{wr_id}").json()
     energy = data["energy"]
-    assert "tokens_in" in energy
-    assert "tokens_out" in energy
-    assert "record_count" in energy
+    assert energy["tokens_in"] == 42
+    assert energy["tokens_out"] == 17
+    assert energy["record_count"] == 1
 
 
 def test_worker_run_id_not_interchangeable_with_workflow_run_id(client: TestClient) -> None:
