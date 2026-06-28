@@ -23,7 +23,7 @@ from ant_orchestrator.integration.documentation_preparer import (
     DocumentationRequest,
 )
 from ant_orchestrator.integration.proposal_store import ProposalStore
-from ant_orchestrator.workflows.graph import _bind_approval
+from ant_orchestrator.workflows.graph_support import bind_approval as _bind_approval
 from ant_orchestrator.workflows.nodes import PHASE_EXECUTE, PHASE_FAILED
 from tests.conftest import FakeClock, SequentialIdGenerator
 from tests.support.fake_audit_sink import FakeAuditSink

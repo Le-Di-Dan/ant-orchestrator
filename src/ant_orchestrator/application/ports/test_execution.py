@@ -78,6 +78,11 @@ class TestExecutionOutcome:
             if self.disposition is None or self.reason_code is None or self.category is None:
                 raise InvariantViolation("non-success outcome requires classification facets")
 
+    @property
+    def is_cancelled(self) -> bool:
+        """True when the outcome represents an out-of-band cancellation."""
+        return self.disposition is RecoveryDisposition.TERMINAL_CANCELLED
+
     def to_state_dict(self) -> dict[str, object]:
         """Render as a JSON-safe dict the workflow can fold into its state."""
         return {
@@ -93,10 +98,20 @@ class TestExecutionOutcome:
 
 @runtime_checkable
 class TestExecutionPort(Protocol):
-    """Run one durable, read-only Test Ant execution for an approved attempt."""
+    """Run one durable, read-only Test Ant execution for an approved attempt.
+
+    CP4: ``attempt_ref`` removed (the adapter creates/owns the attempt internally);
+    ``context_manifest_digest`` added (binds the approved workflow context, §2.1).
+    """
 
     __test__: ClassVar[bool] = False  # domain term; not a pytest test class
 
-    def execute(self, *, task_id: str, run_id: str, attempt_ref: str) -> TestExecutionOutcome:
+    def execute(
+        self,
+        *,
+        task_id: str,
+        run_id: str,
+        context_manifest_digest: str = "",
+    ) -> TestExecutionOutcome:
         """Execute (or idempotently recover) the bound test action."""
         ...

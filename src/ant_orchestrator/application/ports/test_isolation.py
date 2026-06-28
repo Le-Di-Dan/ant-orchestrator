@@ -69,6 +69,22 @@ class IsolatedRunStatus(_StrEnum):
     ISOLATION_SETUP_FAILED = "isolation_setup_failed"
 
 
+class BackendReason(_StrEnum):
+    """Stable, allowlisted reason for a failed launch/setup (PHASE_6_PLAN CP4, §2.2).
+
+    Typed signal surfaced from the isolation backend to the classifier. Only allowlisted
+    values may influence transience/disposition — no raw exception or string parsing.
+    Moved here from workers/test/classifier.py (CP4 gap: IsolatedExecutionResult needs it).
+    """
+
+    EXECUTABLE_MISSING = "executable_missing"
+    PERMISSION_DENIED = "permission_denied"
+    ADAPTER_CONFIG_INVALID = "adapter_config_invalid"
+    RESOURCE_TEMPORARILY_UNAVAILABLE = "resource_temporarily_unavailable"
+    PROCESS_INTERRUPTION = "process_interruption"
+    ISOLATION_VIOLATION = "isolation_violation"
+
+
 @dataclass(frozen=True, slots=True)
 class IsolationCapability:
     """Result of a backend availability preflight (fail-closed).
@@ -141,12 +157,18 @@ class IsolatedExecutionSpec:
 
 @dataclass(frozen=True, slots=True)
 class IsolatedExecutionResult:
-    """Bounded, JSON-safe result of one isolated run (no raw output/exception/path)."""
+    """Bounded, JSON-safe result of one isolated run (no raw output/exception/path).
+
+    ``backend_reason`` (CP4) is the typed, allowlisted signal the backend may surface for
+    a failed launch/setup. It drives the classifier's transience decision without any
+    string parsing — only values in :class:`BackendReason` are valid.
+    """
 
     status: IsolatedRunStatus
     exit_code: int | None = None
     duration_ms: int = 0
     evidence_refs: tuple[str, ...] = field(default_factory=tuple)
+    backend_reason: BackendReason | None = None  # CP4: typed refinement (additive)
 
     def __post_init__(self) -> None:
         if self.duration_ms < 0:

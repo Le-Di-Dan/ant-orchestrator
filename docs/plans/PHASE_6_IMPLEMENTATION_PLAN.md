@@ -564,3 +564,36 @@ import/security boundary test khẳng định TestAnt không nhận mutator/Git/
 import Docker backend/LangGraph/persistence/energy/subprocess. `files_changed=()`, `provider_invoked=False`.
 Không retry/regroup/escalation wiring, không node `test`, không bump definition, không persistence/energy,
 không sửa ROADMAP. Phase 6 vẫn `NOT_STARTED` cho tới CP8.
+
+### CP4 — Durable Test Execution, node `test`, retry đúng worker và classified recovery wiring (đã triển khai)
+
+1. **TestExecutionPort.execute() signature đổi từ CP1 plan: bỏ `attempt_ref`, thêm `context_manifest_digest`.**
+   - CP1 plan dự tính adapter nhận `attempt_ref` ngoài; CP4 quyết định adapter tự tạo attempt (owned internally).
+   - `context_manifest_digest=""` mặc định → backward-compat với legacy mode. Adapter tạo `attempt_id` qua
+     `AttemptOrchestrator.before_execute`.
+
+2. **`BackendReason` di chuyển từ `workers/test/classifier.py` lên `application/ports/test_isolation.py`.**
+   - CP1 để BackendReason trong worker package nhưng `IsolatedExecutionResult` (port level) cần tham chiếu nó.
+   - Giải quyết circular dependency: port không được import worker. Classifier giờ import BackendReason từ port.
+
+3. **`_bind_approval` và `_execute_documentation` tách ra `graph_support.py` (từ graph.py private).**
+   - graph.py sau khi thêm ~50 dòng CP4 sẽ vượt 350 nếu giữ hai helper. Di chuyển sang graph_support.py (public).
+   - test_phase5_cp6_composition.py và test_phase5_cp6_preparation.py cập nhật import mới (alias giữ tên cũ).
+
+4. **Cancellation trong `DurableTestExecution` không gọi `worker_outcome_for` (raises by design).**
+   - Deviation từ CP1 #4: khi `result.cancelled=True`, trả `TestExecutionOutcome` với `TERMINAL_CANCELLED`.
+   - `after_execute` KHÔNG được gọi cho out-of-band cancellation.
+
+5. **`new_graph_state()` bổ sung khởi tạo compact test fields (CP4 additive).**
+   - 8 fields mới (`test_status`, `test_outcome`, ...) được khởi tạo với `None`/`[]` trong `new_graph_state`.
+   - `GRAPH_STATE_SCHEMA_VERSION` không đổi (2) vì fields là additive optional.
+
+6. **Version guard test (version 3 checkpoint) test đúng layer: `check_definition_version(3)` raises.**
+   - Application services gọi `check_definition_version` explicitly, không phải `runner.resume()`.
+   - Test sử dụng `runner_v4.check_definition_version(3)` thay vì thử resume thật.
+
+Tuân thủ: 7 file source CP4 đều ≤350 dòng (max 333: `graph.py`); mypy `src` clean trên files thay đổi; ruff
+lint/format clean; **47 CP4 test pass** (routing 18, invocation 8, context-binding 12, version 9), full suite
+**all passed / skipped**; LangGraph chỉ nằm trong graph.py; worker không import Docker/LangGraph/persistence;
+graph layer không import Docker backend. Không persist report, không write energy, không handoff terminal,
+không sửa CompletionFinalizer, không sửa ROADMAP. `WORKFLOW_DEFINITION_VERSION` 3→4.

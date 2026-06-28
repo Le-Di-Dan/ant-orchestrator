@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from ant_orchestrator.application.ports.documentation_execution import (
+    DocumentationExecutionOutcome,
+    DocumentationExecutionPort,
+)
 from ant_orchestrator.application.ports.worker import WorkerActionIntent, WorkerOutcome
 from ant_orchestrator.core.domain.enums import ApprovalContinuation, GateType
 from ant_orchestrator.workflows.routing import (
@@ -22,10 +26,12 @@ from ant_orchestrator.workflows.routing import (
     route_regroup,
     route_retry,
 )
+from ant_orchestrator.workflows.state import GraphState
 
 # Phase markers used by the conditional edges.
 PHASE_PLAN = "plan"
 PHASE_EXECUTE = "execute"
+PHASE_TEST = "test"  # CP4: dedicated Test Ant execution node
 PHASE_PREPARE_INTENT = "prepare_intent"
 PHASE_AWAIT_APPROVAL = "await_approval"
 PHASE_VALIDATE = "validate"
@@ -217,3 +223,64 @@ def _regroup_or_escalate(state: Mapping[str, object]) -> dict[str, object]:
 
 def _escalate(gate_type: GateType, continuation: ApprovalContinuation) -> dict[str, object]:
     return {"phase": PHASE_PREPARE_INTENT, "gate_type": gate_type, "continuation": continuation}
+
+
+# ---------------------------------------------------------------------------
+# Helpers moved here from graph.py (CP4) to keep graph.py under 350 lines.
+# ---------------------------------------------------------------------------
+
+_DOC_OUTCOME_KEY = "last_outcome"
+
+
+def bind_approval(delta: dict[str, object], intent: dict[str, object], state: GraphState) -> None:
+    """On approve-to-execute, verify the approval binds this proposal and stamp its ref.
+
+    A mismatch with the durable proposal in state means the approval is for a different
+    proposal — fail closed (no execution under a foreign authority).
+    """
+    if delta.get("phase") != PHASE_EXECUTE:
+        return
+    proposal_digest = state.get("proposal_digest")
+    if not (isinstance(proposal_digest, str) and proposal_digest):
+        return
+    payload = intent.get("sanitized_payload")
+    bound = payload.get("proposal_digest") if isinstance(payload, dict) else None
+    if bound != proposal_digest:
+        delta["phase"] = PHASE_FAILED
+        delta["error_summary"] = "approval_binding_mismatch"
+        return
+    delta["approval_ref"] = str(intent.get("gate_instance_id", ""))
+
+
+def execute_documentation_node(
+    port: DocumentationExecutionPort,
+    state: GraphState,
+    run_id: str,
+    next_phase: str = PHASE_VALIDATE,
+) -> dict[str, object]:
+    """Drive the durable Documentation Ant path; fail closed on missing proposal authority.
+
+    ``next_phase`` controls where the graph routes after a successful execution:
+    ``PHASE_VALIDATE`` (legacy) or ``PHASE_TEST`` (Phase 6, when Test Ant follows).
+    """
+    proposal_ref = str(state.get("proposal_ref", ""))
+    proposal_digest = str(state.get("proposal_digest", ""))
+    if not proposal_ref or not proposal_digest:
+        return {"phase": PHASE_FAILED, "error_summary": "missing_proposal_authority"}
+    outcome: DocumentationExecutionOutcome = port.execute(
+        task_id=str(state.get("task_id", "")),
+        run_id=run_id,
+        proposal_ref=proposal_ref,
+        proposal_digest=proposal_digest,
+        approval_ref=str(state.get("approval_ref", "")),
+    )
+    action_intent = dict(state.get("action_intent") or {})
+    action_intent[_DOC_OUTCOME_KEY] = outcome.outcome.value
+    evidence = list(state.get("evidence_refs") or [])
+    evidence.extend(outcome.evidence_refs)
+    return {
+        "action_intent": action_intent,
+        "evidence_refs": evidence,
+        "phase": next_phase,
+        "execution_attempt_ref": outcome.attempt_ref,
+    }

@@ -1,11 +1,9 @@
 """Workflow graph with the real human-approval interrupt path (PHASE_4_PLAN D.2).
 
-LangGraph lives only in this module. The CP3 ``gate_blocked`` placeholder is gone:
-``REQUIRE_APPROVAL`` and every escalation now fold into a single
-``prepare_intent`` → ``await_approval`` path that raises a LangGraph ``interrupt``.
-On resume, APPROVE follows the approved continuation, while REJECT/CANCEL route to
-fixed terminal markers. Terminal nodes only emit a ``final_outcome`` marker — they
-never mutate Task/WorkflowRun/Approval (that is the finalizers' job, off-graph).
+LangGraph lives only in this module. CP4 adds node ``test`` (Test Ant execution) between
+``execute_stub`` and ``validate``, a dedicated ``route_after_test_validation`` for the test
+path, and bumps the definition version 3→4. Legacy graphs without a test port continue to
+work: execute_stub routes to PHASE_VALIDATE and the test node is never entered.
 """
 
 from __future__ import annotations
@@ -16,7 +14,11 @@ from langgraph.types import interrupt
 from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
 )
-from ant_orchestrator.application.ports.worker import WorkerExecutionPort
+from ant_orchestrator.application.ports.test_execution import (
+    TestExecutionOutcome,
+    TestExecutionPort,
+)
+from ant_orchestrator.application.ports.worker import WorkerExecutionPort, WorkerOutcome
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
@@ -33,9 +35,12 @@ from ant_orchestrator.workflows.graph_support import (
     PHASE_PREPARE_INTENT,
     PHASE_REJECTED,
     PHASE_REVIEW,
+    PHASE_TEST,
     PHASE_VALIDATE,
     apply_approval_delta,
+    bind_approval,
     build_escalation_payload,
+    execute_documentation_node,
     intent_from_state,
     intent_to_state,
     last_outcome,
@@ -55,6 +60,7 @@ from ant_orchestrator.workflows.nodes import (
     prepare_approval_intent,
 )
 from ant_orchestrator.workflows.state import GraphState
+from ant_orchestrator.workflows.test_routing import route_after_test_validation
 
 __all__ = ["WORKFLOW_DEFINITION_VERSION", "build_workflow_graph"]
 
@@ -62,6 +68,7 @@ NODE_PLAN = "plan"
 NODE_CONTEXT = "context"
 NODE_DECISION = "decision"
 NODE_EXECUTE = "execute_stub"
+NODE_TEST = "test"
 NODE_VALIDATE = "validate"
 NODE_REVIEW = "review"
 NODE_PREPARE_INTENT = "prepare_intent"
@@ -71,60 +78,6 @@ NODE_FAILED = "failed"
 NODE_REJECTED = "rejected"
 NODE_CANCELLED = "cancelled"
 
-_OUTCOME_KEY = "last_outcome"
-
-
-def _bind_approval(delta: dict[str, object], intent: dict[str, object], state: GraphState) -> None:
-    """On approve-to-execute, verify the approval binds this proposal and stamp its ref.
-
-    The approval intent carried the proposal digest into the human gate; a mismatch with
-    the durable proposal in state means the approval is for a different proposal — fail
-    closed (no execution under a foreign authority).
-    """
-    if delta.get("phase") != PHASE_EXECUTE:
-        return
-    proposal_digest = state.get("proposal_digest")
-    if not (isinstance(proposal_digest, str) and proposal_digest):
-        return  # legacy / non-documentation run carries no proposal binding
-    payload = intent.get("sanitized_payload")
-    bound = payload.get("proposal_digest") if isinstance(payload, dict) else None
-    if bound != proposal_digest:
-        delta["phase"] = PHASE_FAILED
-        delta["error_summary"] = "approval_binding_mismatch"
-        return
-    delta["approval_ref"] = str(intent.get("gate_instance_id", ""))
-
-
-def _execute_documentation(
-    port: DocumentationExecutionPort, state: GraphState, run_id: str
-) -> dict[str, object]:
-    """Drive the durable Documentation Ant path; fail closed on missing proposal authority.
-
-    The production Phase 5 path never falls back to a placeholder context or a stub: a run
-    that reaches execution without a bound proposal is a structured ``FAILED`` (no provider).
-    """
-    proposal_ref = str(state.get("proposal_ref", ""))
-    proposal_digest = str(state.get("proposal_digest", ""))
-    if not proposal_ref or not proposal_digest:
-        return {"phase": PHASE_FAILED, "error_summary": "missing_proposal_authority"}
-    outcome = port.execute(
-        task_id=str(state.get("task_id", "")),
-        run_id=run_id,
-        proposal_ref=proposal_ref,
-        proposal_digest=proposal_digest,
-        approval_ref=str(state.get("approval_ref", "")),
-    )
-    action_intent = dict(state.get("action_intent") or {})
-    action_intent[_OUTCOME_KEY] = outcome.outcome.value
-    evidence = list(state.get("evidence_refs") or [])
-    evidence.extend(outcome.evidence_refs)
-    return {
-        "action_intent": action_intent,
-        "evidence_refs": evidence,
-        "phase": PHASE_VALIDATE,
-        "execution_attempt_ref": outcome.attempt_ref,
-    }
-
 
 def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, object]) -> None:
     """Merge a routing result into a node delta, folding any escalation gate."""
@@ -133,6 +86,8 @@ def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, o
     delta.update(route)
     if gate_type is not None:
         action_intent = dict(state.get("action_intent") or {})
+        from ant_orchestrator.core.domain.enums import GateType
+
         mark_pending_gate(
             action_intent,
             gate_type=gate_type,  # type: ignore[arg-type]
@@ -142,19 +97,62 @@ def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, o
         delta["action_intent"] = action_intent
 
 
+# Compact test outcome → routing status for node ``test``.
+_TEST_STATUS: dict[WorkerOutcome, str] = {
+    WorkerOutcome.SUCCESS: "pass",
+    WorkerOutcome.RETRYABLE_FAILURE: "retryable",
+    WorkerOutcome.ESCALATION: "escalate",
+    WorkerOutcome.PERMANENT_FAILURE: "fatal",
+}
+
+
+def _execute_test_port(
+    port: TestExecutionPort, state: GraphState, run_id: str
+) -> dict[str, object]:
+    """Call the TestExecutionPort and fold its compact outcome into graph state.
+
+    No classifier logic, no retry policy, no Docker — only the impure call and state
+    delta. Cancellation (TERMINAL_CANCELLED disposition) routes directly to CANCELLED.
+    """
+    outcome: TestExecutionOutcome = port.execute(
+        task_id=str(state.get("task_id", "")),
+        run_id=run_id,
+        context_manifest_digest=str(state.get("manifest_digest") or ""),
+    )
+    if outcome.is_cancelled:
+        return {"phase": PHASE_CANCELLED}
+    delta: dict[str, object] = {
+        "phase": PHASE_VALIDATE,
+        "test_status": _TEST_STATUS.get(outcome.outcome, "escalate"),
+        "test_outcome": outcome.outcome.value,
+        "test_attempt_ref": outcome.attempt_ref,
+        "test_logical_action_ref": outcome.attempt_ref,  # stable action bound to attempt
+    }
+    if outcome.category is not None:
+        delta["test_failure_category"] = outcome.category.value
+    if outcome.reason_code is not None:
+        delta["test_reason_code"] = outcome.reason_code.value
+    if outcome.disposition is not None:
+        delta["test_recovery_disposition"] = outcome.disposition.value
+    if outcome.evidence_refs:
+        delta["test_evidence_refs"] = list(outcome.evidence_refs)
+    return delta
+
+
 def build_workflow_graph(
     worker: WorkerExecutionPort,
     policy: DecisionGatePolicy,
     attempt_orchestrator: AttemptOrchestrator | None = None,
     cancellation_probe: CancellationProbe | None = None,
     documentation_execution: DocumentationExecutionPort | None = None,
+    test_execution: TestExecutionPort | None = None,
 ) -> StateGraph:
     """Build (but do not compile) the graph.
 
-    When ``documentation_execution`` is injected (Phase 5 production), the execution node
-    drives the real durable Documentation Ant path (proposal/approval bound, persistence,
-    journal completion, attempt settlement). Without it (legacy/unit tests), the node runs
-    the deterministic stub worker. The production composition root never leaves it ``None``.
+    ``documentation_execution``: Phase 5 durable Documentation Ant (fail-closed when None
+    in production). ``test_execution``: Phase 6 durable Test Ant — when set, execute_stub
+    routes to node ``test`` before ``validate``; when None (legacy/unit tests), the graph
+    skips the test node and routes directly to ``validate``.
     """
 
     def decision(state: GraphState) -> dict[str, object]:
@@ -181,8 +179,13 @@ def build_workflow_graph(
         run_id = str(state.get("workflow_run_id", ""))
         if cancellation_probe is not None and cancellation_probe.is_cancel_requested(run_id):
             return {"phase": PHASE_CANCELLED}
+        # Phase 6 production: Documentation Ant then Test Ant.
+        next_phase = PHASE_TEST if test_execution is not None else PHASE_VALIDATE
         if documentation_execution is not None:
-            return _execute_documentation(documentation_execution, state, run_id)
+            return execute_documentation_node(
+                documentation_execution, state, run_id, next_phase=next_phase
+            )
+        # Legacy stub worker (tests / pre-Phase-5 path).
         intent = intent_from_state(state)
         attempt_id: str | None = None
         if attempt_orchestrator is not None:
@@ -191,17 +194,35 @@ def build_workflow_graph(
         if attempt_orchestrator is not None and attempt_id is not None:
             attempt_orchestrator.after_execute(attempt_id, result.outcome)
         action_intent = dict(state.get("action_intent") or {})
-        action_intent[_OUTCOME_KEY] = result.outcome.value
+        action_intent["last_outcome"] = result.outcome.value
         evidence = list(state.get("evidence_refs") or [])
         evidence.extend(result.evidence_refs)
         return {
             "action_intent": action_intent,
             "evidence_refs": evidence,
-            "phase": PHASE_VALIDATE,
+            "phase": next_phase,
             "execution_attempt_ref": attempt_id,
         }
 
+    def test(state: GraphState) -> dict[str, object]:
+        """Impure Test Ant boundary — check cancel, call port, write compact state delta."""
+        run_id = str(state.get("workflow_run_id", ""))
+        if cancellation_probe is not None and cancellation_probe.is_cancel_requested(run_id):
+            return {"phase": PHASE_CANCELLED}
+        if test_execution is None:
+            # Legacy mode: no test port injected → deterministic pass-through.
+            return {"phase": PHASE_VALIDATE, "test_status": "pass"}
+        return _execute_test_port(test_execution, state, run_id)
+
     def validate(state: GraphState) -> dict[str, object]:
+        test_status = state.get("test_status")
+        if test_status is not None:
+            # Test Ant path: compact outcome already set by node ``test``.
+            route = route_after_test_validation(state, str(test_status))
+            delta: dict[str, object] = {}
+            _apply_route(delta, state, route)
+            return delta
+        # Legacy DocAnt path (unchanged behavior).
         delta = dict(evaluate_validation(state, last_outcome(state)))
         route = route_after_validation(state, status_of(delta, "validation_result"))
         _apply_route(delta, state, route)
@@ -236,9 +257,8 @@ def build_workflow_graph(
         decision_token = str(interrupt(intent))
         delta = apply_approval_delta(intent, decision_token, state)
         delta["approval_decision"] = {"decision": decision_token}
-        # Clear approval_intent so the next prepare_intent treats it as a new occurrence.
         delta["approval_intent"] = None
-        _bind_approval(delta, intent, state)
+        bind_approval(delta, intent, state)
         return delta
 
     graph = StateGraph(GraphState)
@@ -246,6 +266,7 @@ def build_workflow_graph(
     graph.add_node(NODE_CONTEXT, context_node)
     graph.add_node(NODE_DECISION, decision)
     graph.add_node(NODE_EXECUTE, execute_stub)
+    graph.add_node(NODE_TEST, test)
     graph.add_node(NODE_VALIDATE, validate)
     graph.add_node(NODE_REVIEW, review)
     graph.add_node(NODE_PREPARE_INTENT, prepare_intent)
@@ -289,23 +310,38 @@ def _wire_edges(graph: StateGraph) -> None:
             PHASE_PERSIST: NODE_PERSIST,
             PHASE_REJECTED: NODE_REJECTED,
             PHASE_CANCELLED: NODE_CANCELLED,
-            PHASE_FAILED: NODE_FAILED,  # RetryGrant bound fail-closed
+            PHASE_FAILED: NODE_FAILED,
         },
     )
     graph.add_conditional_edges(
         NODE_EXECUTE,
         phase_of,
-        {PHASE_VALIDATE: NODE_VALIDATE, PHASE_CANCELLED: NODE_CANCELLED},
+        {
+            PHASE_VALIDATE: NODE_VALIDATE,  # legacy path (no test port)
+            PHASE_TEST: NODE_TEST,  # Phase 6 path (test port injected)
+            PHASE_CANCELLED: NODE_CANCELLED,
+            PHASE_FAILED: NODE_FAILED,
+        },
+    )
+    graph.add_conditional_edges(
+        NODE_TEST,
+        phase_of,
+        {
+            PHASE_VALIDATE: NODE_VALIDATE,
+            PHASE_CANCELLED: NODE_CANCELLED,
+        },
     )
     graph.add_conditional_edges(
         NODE_VALIDATE,
         phase_of,
         {
             PHASE_REVIEW: NODE_REVIEW,
-            PHASE_EXECUTE: NODE_EXECUTE,
+            PHASE_TEST: NODE_TEST,  # Test Ant retry (CP4)
+            PHASE_EXECUTE: NODE_EXECUTE,  # DocAnt retry (legacy)
             PHASE_PLAN: NODE_PLAN,
             PHASE_FAILED: NODE_FAILED,
             PHASE_PREPARE_INTENT: NODE_PREPARE_INTENT,
+            PHASE_CANCELLED: NODE_CANCELLED,
         },
     )
     graph.add_conditional_edges(

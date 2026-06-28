@@ -18,6 +18,7 @@ from langgraph.types import Command
 from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
 )
+from ant_orchestrator.application.ports.test_execution import TestExecutionPort
 from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.application.ports.workflow_runner import (
     GraphStateSchemaMismatch,
@@ -86,6 +87,7 @@ class WorkflowRunner:
         cancellation_probe: CancellationProbe | None = None,
         definition_version: int = WORKFLOW_DEFINITION_VERSION,
         documentation_execution: DocumentationExecutionPort | None = None,
+        test_execution: TestExecutionPort | None = None,
     ) -> None:
         self._worker = worker
         self._policy = policy
@@ -94,6 +96,7 @@ class WorkflowRunner:
         self._cancellation_probe = cancellation_probe
         self._definition_version = definition_version
         self._documentation_execution = documentation_execution
+        self._test_execution = test_execution
 
     def _build_app(self, saver: object) -> Any:
         """Compile the graph against ``saver`` with all injected dependencies."""
@@ -103,6 +106,7 @@ class WorkflowRunner:
             self._attempt_orchestrator,
             self._cancellation_probe,
             self._documentation_execution,
+            self._test_execution,
         ).compile(checkpointer=saver)
 
     def check_definition_version(self, run_definition_version: int) -> None:

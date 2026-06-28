@@ -90,6 +90,11 @@ class TestExecutionScope:
     command_profile_key: str
     idempotency_key: str
     isolation_ref: str | None = None
+    # CP4 context binding (additive, backward-compatible):
+    # Approved workflow context manifest digest (from GraphState) — empty means no binding.
+    context_manifest_digest: str = ""
+    # Digest of canonical_read_scope computed by DurableTestExecution; stable per strategy.
+    read_scope_digest: str = ""
 
     def __post_init__(self) -> None:
         for name in (

@@ -76,6 +76,16 @@ class GraphState(TypedDict, total=False):
     evidence_refs: list[str]
     final_outcome: str | None
     error_summary: str | None
+    # CP4: Test Ant compact outcome (routing only; no raw output/exception/host path).
+    # Absent before node `test` runs; reset on retry/regroup. JSON-safe string refs only.
+    test_status: str | None  # "pass"|"retryable"|"escalate"|"fatal"|"cancelled"
+    test_outcome: str | None  # WorkerOutcome value
+    test_failure_category: str | None  # FailureCategory value
+    test_reason_code: str | None  # TestReasonCode value
+    test_recovery_disposition: str | None  # RecoveryDisposition value
+    test_attempt_ref: str | None  # stable attempt identity
+    test_logical_action_ref: str | None  # stable logical action identity
+    test_evidence_refs: list[str]  # bounded sanitized references
 
 
 _JSON_SCALARS = (str, int, float, bool)
@@ -169,4 +179,13 @@ def new_graph_state(
         regroup_count=0,
         approval_gate_sequence=0,
         evidence_refs=[],
+        # CP4: compact test fields (additive optional, default None/[]).
+        test_status=None,
+        test_outcome=None,
+        test_failure_category=None,
+        test_reason_code=None,
+        test_recovery_disposition=None,
+        test_attempt_ref=None,
+        test_logical_action_ref=None,
+        test_evidence_refs=[],
     )

@@ -31,8 +31,9 @@ _NOW = UtcTimestamp(datetime(2026, 6, 27, tzinfo=UTC))
 
 
 # --- definition version bump --------------------------------------------------
-def test_definition_version_is_three() -> None:
-    assert WORKFLOW_DEFINITION_VERSION == 3
+def test_definition_version_is_four() -> None:
+    # CP4 (phase6): node ``test`` added → topology change → version 3→4.
+    assert WORKFLOW_DEFINITION_VERSION == 4
 
 
 # --- deterministic identity ---------------------------------------------------

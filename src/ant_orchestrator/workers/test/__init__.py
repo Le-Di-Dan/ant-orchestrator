@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from ant_orchestrator.application.ports.test_isolation import BackendReason
 from ant_orchestrator.workers.test.ant import TestAnt
 from ant_orchestrator.workers.test.classifier import (
-    BackendReason,
     ClassifiedExecution,
     PreflightStatus,
     TestExecutionFacts,

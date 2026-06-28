@@ -22,7 +22,7 @@ from ant_orchestrator.energy.durable_lifecycle import DurableEnergyLifecycle
 from ant_orchestrator.energy.worker_lifecycle import InMemoryEnergyLifecycle
 from ant_orchestrator.integration.composition import build_documentation_execution
 from ant_orchestrator.integration.errors import ProductionWorkerConfigMissing
-from ant_orchestrator.workflows.graph import _execute_documentation
+from ant_orchestrator.workflows.graph_support import execute_documentation_node as _execute_documentation
 from ant_orchestrator.workflows.nodes import PHASE_FAILED, PHASE_VALIDATE
 from tests.conftest import FakeClock, SequentialIdGenerator
 from tests.test_phase5_cp5_documentation import _policy

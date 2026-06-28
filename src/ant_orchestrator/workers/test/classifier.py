@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ant_orchestrator.application.ports.test_isolation import IsolatedRunStatus
+from ant_orchestrator.application.ports.test_isolation import BackendReason, IsolatedRunStatus
 from ant_orchestrator.core.domain.enums import _StrEnum
 from ant_orchestrator.core.domain.errors import InvariantViolation
 from ant_orchestrator.core.domain.test_failure import (
@@ -47,17 +47,6 @@ class PreflightStatus(_StrEnum):
     INVALID_COMMAND = "invalid_command"
     BUDGET_EXHAUSTED = "budget_exhausted"
     CANCELLED = "cancelled"
-
-
-class BackendReason(_StrEnum):
-    """Stable, allowlisted refinement of a failed launch/setup (never parsed from text)."""
-
-    EXECUTABLE_MISSING = "executable_missing"
-    PERMISSION_DENIED = "permission_denied"
-    ADAPTER_CONFIG_INVALID = "adapter_config_invalid"
-    RESOURCE_TEMPORARILY_UNAVAILABLE = "resource_temporarily_unavailable"
-    PROCESS_INTERRUPTION = "process_interruption"
-    ISOLATION_VIOLATION = "isolation_violation"
 
 
 @dataclass(frozen=True, slots=True)

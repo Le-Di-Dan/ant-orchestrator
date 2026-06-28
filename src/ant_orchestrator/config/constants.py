@@ -67,7 +67,7 @@ GRAPH_STATE_SCHEMA_VERSION: Final = 2
 # OPTIONAL JSON-safe state fields (proposal/approval/attempt/report refs), so a schema-2
 # checkpoint still round-trips — the runtime invariants (not the schema) enforce them on
 # the Phase 5 production path.
-WORKFLOW_DEFINITION_VERSION: Final = 3
+WORKFLOW_DEFINITION_VERSION: Final = 4
 WORKFLOW_MAX_RETRIES: Final = 2
 WORKFLOW_MAX_RETRY_EXTENSIONS: Final = 1
 WORKFLOW_MAX_REGROUPS: Final = 1
