@@ -7,15 +7,18 @@ from collections.abc import Sequence
 
 from ant_orchestrator.core.domain.enums import ConfidenceLevel, MemoryType
 from ant_orchestrator.core.domain.records import MemoryRecord
-from ant_orchestrator.core.domain.value_objects import MemoryId, UtcTimestamp
+from ant_orchestrator.core.domain.value_objects import MemoryId, TaskId, UtcTimestamp
 from ant_orchestrator.persistence.repositories.base import SqliteRepository
 from ant_orchestrator.persistence.serialization import dump_str_tuple, load_str_tuple
 
-_COLUMNS = "id, type, title, summary, source, confidence, tags_json, created_at, deprecated"
+_COLUMNS = (
+    "id, type, title, summary, source, confidence, tags_json, created_at, deprecated, task_id"
+)
 
 
 def _to_memory(row: sqlite3.Row) -> MemoryRecord:
     confidence = row["confidence"]
+    raw_task_id = row["task_id"]
     return MemoryRecord(
         id=MemoryId(row["id"]),
         type=MemoryType.parse(row["type"]),
@@ -26,6 +29,7 @@ def _to_memory(row: sqlite3.Row) -> MemoryRecord:
         confidence=ConfidenceLevel.parse(confidence) if confidence is not None else None,
         tags=load_str_tuple(row["tags_json"]),
         deprecated=bool(row["deprecated"]),
+        task_id=TaskId(raw_task_id) if raw_task_id is not None else None,
     )
 
 
@@ -35,7 +39,7 @@ class SqliteMemoryRepository(SqliteRepository):
     def append(self, memory: MemoryRecord) -> None:
         with self._db.transaction() as conn:
             conn.execute(
-                f"INSERT INTO memory_records ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO memory_records ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     memory.id.value,
                     memory.type.value,
@@ -46,6 +50,7 @@ class SqliteMemoryRepository(SqliteRepository):
                     dump_str_tuple(memory.tags),
                     memory.created_at.to_iso(),
                     int(memory.deprecated),
+                    memory.task_id.value if memory.task_id is not None else None,
                 ),
             )
 

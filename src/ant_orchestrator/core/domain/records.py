@@ -209,6 +209,7 @@ class MemoryRecord:
     confidence: ConfidenceLevel | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
     deprecated: bool = False
+    task_id: TaskId | None = None
 
     def __post_init__(self) -> None:
         if not self.title:

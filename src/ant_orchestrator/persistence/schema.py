@@ -122,7 +122,8 @@ _MEMORY_DDL = f"""CREATE TABLE memory_records (
     confidence TEXT CHECK ({check_in("confidence", ConfidenceLevel, nullable=True)}),
     tags_json TEXT,
     created_at TEXT NOT NULL,
-    deprecated INTEGER NOT NULL DEFAULT 0 CHECK (deprecated IN (0, 1))
+    deprecated INTEGER NOT NULL DEFAULT 0 CHECK (deprecated IN (0, 1)),
+    task_id TEXT REFERENCES tasks(id)
 )"""
 
 # Ordered so every FK target is created before its referrer (workflow_runs before
@@ -155,7 +156,9 @@ _V1_INDEX_DDL: tuple[str, ...] = (
     "CREATE INDEX idx_mem_type ON memory_records(type)",
 )
 
-INDEX_DDL: tuple[str, ...] = (*_V1_INDEX_DDL, *WORKFLOW_INDEX_DDL)
+_V4_INDEX_DDL: tuple[str, ...] = ("CREATE INDEX idx_mem_task ON memory_records(task_id)",)
+
+INDEX_DDL: tuple[str, ...] = (*_V1_INDEX_DDL, *WORKFLOW_INDEX_DDL, *_V4_INDEX_DDL)
 
 _APPROVALS_EXPECTED = (
     frozenset({"id", "task_id", "checkpoint_id", "status", "reason", "requested_at", "decided_at"})
@@ -212,6 +215,7 @@ EXPECTED_SCHEMA: dict[str, frozenset[str]] = {
             "tags_json",
             "created_at",
             "deprecated",
+            "task_id",
         }
     ),
     **WORKFLOW_EXPECTED_SCHEMA,
