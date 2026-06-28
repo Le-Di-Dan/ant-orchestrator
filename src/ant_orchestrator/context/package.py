@@ -25,6 +25,7 @@ from ant_orchestrator.application.ports.context_builder import (
     ContextBuildRequest,
     ContextConsumer,
     ContextError,
+    MemoryContextSelection,
 )
 from ant_orchestrator.application.ports.filesystem import (
     ContentRedaction,
@@ -33,6 +34,7 @@ from ant_orchestrator.application.ports.filesystem import (
     FileReadResult,
     FileSystemAdapter,
 )
+from ant_orchestrator.application.ports.memory_context import MemoryContextEntry
 from ant_orchestrator.application.ports.tool_errors import (
     ToolAdapterError,
     ToolInvalidRequestError,
@@ -41,6 +43,10 @@ from ant_orchestrator.application.ports.tool_errors import (
 )
 from ant_orchestrator.context.budget import BudgetUsage
 from ant_orchestrator.context.estimator import TokenEstimator
+from ant_orchestrator.context.memory import (
+    MemoryContextSection,
+    MemoryRecordManifest,
+)
 from ant_orchestrator.context.selection import (
     ArtifactCandidate,
     ContextSelectionResult,
@@ -103,14 +109,16 @@ class ContextManifest:
     policy_version: int
     created_at: UtcTimestamp
     dispatchable: bool
+    memory_section: MemoryContextSection | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ContextPackage:
-    """Immutable context package: manifest + artifacts."""
+    """Immutable context package: manifest + artifacts + memory entries."""
 
     manifest: ContextManifest
     artifacts: tuple[ContextArtifact, ...]
+    memory_entries: tuple[MemoryContextEntry, ...] = ()
 
 
 class ContextBuildFailure(ContextError):
@@ -165,7 +173,10 @@ class ContextPackageBuilder:
             self._est,
             self._clock,
         )
-        pkg = ContextPackage(manifest=manifest, artifacts=artifacts)
+        mem_entries = (
+            request.memory_selection.entries if request.memory_selection is not None else ()
+        )
+        pkg = ContextPackage(manifest=manifest, artifacts=artifacts, memory_entries=mem_entries)
         self._audit_build(cid, manifest)
         return pkg
 
@@ -294,6 +305,7 @@ def _build_manifest(
         )
         for r in sel.rejected
     )
+    memory_section = _build_memory_section(request.memory_selection)
     return ContextManifest(
         task_id=str(request.task_id),
         consumer=request.consumer,
@@ -309,4 +321,21 @@ def _build_manifest(
         policy_version=_CONTEXT_POLICY_VERSION,
         created_at=clock.now(),
         dispatchable=not sel.required_failure,
+        memory_section=memory_section,
+    )
+
+
+def _build_memory_section(
+    sel: MemoryContextSelection | None,
+) -> MemoryContextSection | None:
+    if sel is None or not sel.entries:
+        return None
+    records = tuple(
+        MemoryRecordManifest(record_id=e.record_id, memory_type=e.type_value) for e in sel.entries
+    )
+    return MemoryContextSection(
+        applied_filter=sel.applied_filter,
+        records=records,
+        returned_count=len(records),
+        budget_consumed_tokens=sel.consumed_tokens,
     )

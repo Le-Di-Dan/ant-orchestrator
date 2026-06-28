@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
+from ant_orchestrator.application.ports.memory_context import (
+    MemoryContextSelection as MemoryContextSelection,
+)
 from ant_orchestrator.core.domain.errors import InvariantViolation
 from ant_orchestrator.core.domain.value_objects import TaskId
 from ant_orchestrator.errors import AntError
@@ -94,6 +97,7 @@ class ContextBuildRequest:
     requests: tuple[ArtifactRequest, ...]
     excluded: tuple[str, ...]
     budget: ContextBudget
+    memory_selection: MemoryContextSelection | None = None
 
 
 class ContextError(AntError):

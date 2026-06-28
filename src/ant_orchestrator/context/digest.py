@@ -13,7 +13,10 @@ import hashlib
 import json
 from typing import Final
 
+from ant_orchestrator.application.ports.memory_context import combined_rendered_text
 from ant_orchestrator.context.package import ContextPackage
+
+_MEMORY_LOGICAL_PATH = "memory://ant/context"
 
 DIGEST_ALGORITHM: Final = "sha256"
 CONTEXT_MANIFEST_SCHEMA_VERSION: Final = 1
@@ -38,8 +41,8 @@ def canonical_context_manifest(package: ContextPackage) -> dict[str, object]:
     """Build the deterministic, identity-bearing manifest representation.
 
     Excludes ``created_at`` and any absolute path so the digest is stable across
-    runs and temporary workspaces. Sources are sorted by normalized path so map/set
-    ordering can never change the digest.
+    runs and temporary workspaces. Sources are sorted by normalized path; memory
+    entries are preserved in selection order (order change → digest change).
     """
     manifest = package.manifest
     sources: list[dict[str, object]] = [
@@ -50,6 +53,22 @@ def canonical_context_manifest(package: ContextPackage) -> dict[str, object]:
         }
         for artifact in package.artifacts
     ]
+    memory_canonical: list[dict[str, object]] = []
+    if package.memory_entries:
+        combined = combined_rendered_text(package.memory_entries)
+        mem_tokens = (
+            manifest.memory_section.budget_consumed_tokens
+            if manifest.memory_section is not None
+            else 0
+        )
+        sources.append(
+            {
+                "path": _MEMORY_LOGICAL_PATH,
+                "content_digest": source_digest(combined),
+                "estimated_tokens": mem_tokens,
+            }
+        )
+        memory_canonical = [e.to_canonical() for e in package.memory_entries]
     sources.sort(key=lambda entry: str(entry["path"]))
     return {
         "manifest_schema_version": CONTEXT_MANIFEST_SCHEMA_VERSION,
@@ -60,6 +79,7 @@ def canonical_context_manifest(package: ContextPackage) -> dict[str, object]:
         "estimator_strategy": manifest.estimator_strategy,
         "estimator_version": manifest.estimator_version,
         "sources": sources,
+        "memory_entries": memory_canonical,
     }
 
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from ant_orchestrator.application.ports.memory_context import combined_rendered_text
 from ant_orchestrator.context.digest import (
     canonical_context_manifest,
     manifest_digest,
@@ -34,6 +35,8 @@ _STAGING_PREFIX: Final = ".ctxpkg.tmp-"
 _DIGEST_KEY: Final = "manifest_digest"
 _CANONICAL_KEY: Final = "canonical"
 _ARTIFACT_FILES_KEY: Final = "artifact_files"
+_MEMORY_LOGICAL_PATH: Final = "memory://ant/context"
+_MEMORY_PHYSICAL_FILE: Final = f"{_SOURCES_DIRNAME}/memory_context.txt"
 
 
 class ContextStoreError(DomainError):
@@ -184,6 +187,10 @@ class ContextPackageStore:
             name = f"{_SOURCES_DIRNAME}/{index:04d}.txt"
             (staging / name).write_text(artifact.content, encoding="utf-8")
             artifact_files[normalize_source_path(artifact.path)] = name
+        if package.memory_entries:
+            combined = combined_rendered_text(package.memory_entries)
+            (staging / _MEMORY_PHYSICAL_FILE).write_text(combined, encoding="utf-8")
+            artifact_files[_MEMORY_LOGICAL_PATH] = _MEMORY_PHYSICAL_FILE
         return artifact_files
 
     # --- verification --------------------------------------------------------
