@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ant_orchestrator.adapters.jsonl_audit_log_reader import JsonlAuditLogReader
 from ant_orchestrator.adapters.jsonl_audit_sink import JsonlAuditSink
 from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
@@ -36,9 +37,11 @@ def build_workflow_services(
     logs_dir = (root / ANT_DIRNAME / "logs") if root else (start / ANT_DIRNAME / "logs")
     clock = SystemClock()
     sink = JsonlAuditSink(logs_dir, clock=clock, redactor=Redactor())
+    reader = JsonlAuditLogReader(logs_dir)
     return _build(
         start,
         documentation_execution=documentation_execution,
         documentation_preparer=documentation_preparer,
         audit_sink=sink,
+        audit_log_reader=reader,
     )

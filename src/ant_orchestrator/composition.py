@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ant_orchestrator.application.ports.audit import AuditEvent, AuditSink
+from ant_orchestrator.application.ports.audit_log_reader import (
+    AuditLogPage,
+    AuditLogQuery,
+    AuditLogReader,
+)
 from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
     WorkflowDocumentationPreparer,
@@ -21,6 +26,7 @@ from ant_orchestrator.application.ports.workspace import NestNotFound
 from ant_orchestrator.application.services.cancel_task import CancelTask
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
 from ant_orchestrator.application.services.create_task import CreateTask
+from ant_orchestrator.application.services.get_task_logs import GetTaskLogs
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
 from ant_orchestrator.application.services.reconciler import Reconciler
 from ant_orchestrator.application.services.resolve_approval import ResolveApproval
@@ -54,6 +60,13 @@ class _NullAuditSink:
         pass
 
 
+class _NullAuditLogReader:
+    """Returns empty page — used as default when no real reader is injected."""
+
+    def read(self, query: AuditLogQuery) -> AuditLogPage:
+        return AuditLogPage(events=(), corrupt_count=0, files_scanned=0, has_more=False)
+
+
 @dataclass(frozen=True, slots=True)
 class WorkflowServices:
     """Workflow use cases + supporting services bound to one discovered Nest."""
@@ -66,6 +79,7 @@ class WorkflowServices:
     reconciler: Reconciler
     task_status: GetTaskStatus
     search_memory: SearchMemory
+    get_task_logs: GetTaskLogs
 
 
 def make_memory_retriever(
@@ -94,6 +108,7 @@ def build_workflow_services(
     documentation_execution: DocumentationExecutionPort | None = None,
     documentation_preparer: WorkflowDocumentationPreparer | None = None,
     audit_sink: AuditSink | None = None,
+    audit_log_reader: AuditLogReader | None = None,
 ) -> WorkflowServices:
     """Discover the Nest from ``start`` and assemble all workflow services.
 
@@ -115,8 +130,12 @@ def build_workflow_services(
         return SqliteUnitOfWork(database)
 
     effective_sink: AuditSink = audit_sink if audit_sink is not None else _NullAuditSink()
+    effective_reader: AuditLogReader = (
+        audit_log_reader if audit_log_reader is not None else _NullAuditLogReader()
+    )
     memory_repo = SqliteMemoryRepository(database)
     search_memory = SearchMemory(memory_repo, effective_sink, clock=clock, ids=ids)
+    get_task_logs = GetTaskLogs(effective_reader)
 
     runner = WorkflowRunner(
         worker=DeterministicStubAdapter(),
@@ -148,4 +167,5 @@ def build_workflow_services(
         reconciler=Reconciler(runner, uow_factory, pause, complete),
         task_status=GetTaskStatus(uow_factory),
         search_memory=search_memory,
+        get_task_logs=get_task_logs,
     )

@@ -7,6 +7,8 @@ checkpoint channel, ``request_json`` payload, secret or stack trace.
 
 from __future__ import annotations
 
+from ant_orchestrator.application.ports.audit_log_reader import AuditLogPage
+from ant_orchestrator.application.services.search_memory import MemorySearchResult
 from ant_orchestrator.application.services.task_status import TaskStatusReport
 from ant_orchestrator.application.services.workflow_support import WorkflowOutcome
 from ant_orchestrator.core.domain.entities import Task
@@ -29,6 +31,35 @@ def render_outcome(task_id: str, outcome: WorkflowOutcome) -> list[str]:
     lines.append(f"Status: {outcome.status}")
     if outcome.approval_id is not None:
         lines.append(f"Pending approval: {outcome.approval_id}")
+    return lines
+
+
+def render_logs(page: AuditLogPage) -> list[str]:
+    """Lines for ``ant logs``: one block per event, newest first."""
+    if not page.events:
+        return []
+    lines: list[str] = []
+    for event in page.events:
+        task_id = event.detail.get("task_id") or "-"
+        lines.append(
+            f"[{event.created_at.to_iso()}] {event.event_type.value}"
+            f" | task={task_id} | corr={str(event.correlation_id)[:8]}"
+        )
+    return lines
+
+
+def render_memory_results(result: MemorySearchResult) -> list[str]:
+    """Lines for ``ant memory search``: one block per record, no summary/content."""
+    if not result.records:
+        return []
+    lines: list[str] = []
+    for record in result.records:
+        conf = record.confidence.value if record.confidence is not None else "-"
+        src = record.source or "-"
+        tags_str = ", ".join(record.tags) if record.tags else "-"
+        lines.append(f"- {record.id.value} [{record.type.value}] {record.title!r}")
+        lines.append(f"  confidence={conf} source={src}")
+        lines.append(f"  created={record.created_at.to_iso()} tags={tags_str}")
     return lines
 
 

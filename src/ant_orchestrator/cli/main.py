@@ -12,7 +12,7 @@ from typing import NoReturn
 import typer
 
 from ant_orchestrator.application.models.outcomes import InitNestOutcome
-from ant_orchestrator.cli import json_contract, phase4_commands, render
+from ant_orchestrator.cli import json_contract, phase4_commands, phase7_logs, phase7_memory, render
 from ant_orchestrator.cli.composition import build_services
 from ant_orchestrator.cli.exit_codes import exit_code_for
 from ant_orchestrator.cli.workflow_composition import build_workflow_services
@@ -105,6 +105,8 @@ def config_show() -> None:
 
 
 phase4_commands.register(app)
+phase7_logs.register(app)
+phase7_memory.register(app)
 
 
 def main() -> None:
