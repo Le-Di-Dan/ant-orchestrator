@@ -497,7 +497,11 @@ Worker thứ 3+; UI; Test Ant tự sửa business logic; Git write.
 
 ### Phase 7 — Minimal Memory Retrieval, CLI/API Surface & MVP Hardening
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
+
+> Completion report: `docs/plans/PHASE_7_COMPLETION_REPORT.md` (CP9 commit `4788b53`).
+> Closure audit: CP10 `fdd43d2` — 48/48 requirements PASS, gate 5/5 PASS (2051 passed, 15 skipped, 0 failed).
+> Verdict: **PHASE 7 COMPLETED — MVP RELEASE GATE PASS** — 2051 passed / 15 skipped / 0 failed.
 
 #### Mục tiêu
 Bổ sung **memory retrieval tối thiểu deterministic** + surface quan sát + hardening, hoàn thiện MVP
@@ -636,3 +640,4 @@ roadmap, chỉ cần PO xác nhận tại thời điểm phù hợp:
 | v1.2 | Phase 1 chuyển `NOT_STARTED` → `COMPLETED` sau implementation theo `docs/plans/PHASE_1_PLAN.md` (8 checkpoint) + closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 127 passed, smoke test `ant init/status/config show`, AST import-boundary, dependency mới duy nhất `pyyaml`. Chi tiết: `docs/plans/PHASE_1_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 1. | Phase 2–7 giữ `NOT_STARTED`. |
 | v1.3 | Phase 3 chuyển `NOT_STARTED` → `COMPLETED` sau implementation 20 commits (CP0–CP9) + independent closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 974 passed 7 skipped, 22 import-boundary tests PASS, 14 integration tests (8 cases) PASS, R-CP3-2 CLOSED, R-CP3-1 ACCEPTED_MVP_LIMITATION. Branch: `phase/3-execution-boundary`. Chi tiết: `docs/plans/PHASE_3_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 3. | Phase 4–7 giữ `NOT_STARTED`. |
 | v1.4 | Phase 4 chuyển `NOT_STARTED` → `COMPLETED` sau implementation CP1–CP8 (10 commits, worker = stub) + independent closure audit CP9. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 1219 passed 7 skipped, mypy strict 151 files, `pip check` clean, restart E2E đa-process thật A–H (0 CP8 skip), CLI smoke `ant init/task create/run/status`. Branch: `develop` (không source branch riêng). Chi tiết: `docs/plans/PHASE_4_COMPLETION_REPORT.md`. Không sửa mục tiêu/scope/DoD Phase 4. | Phase 5–7 giữ `NOT_STARTED`. |
+| v1.5 | Phase 7 chuyển `NOT_STARTED` → `COMPLETED` sau CP0–CP9 (12 commits) + CP10 independent closure audit. Evidence: `python -m scripts.quality.gate` (5/5 PASS), `pytest` 2051 passed 15 skipped 0 failed, 48/48 requirements PASS, 3-level restart recovery (subprocess), FastAPI surface, CLI logs/memory search. CP9 completion report: `4788b53`. CP10 closure audit: `fdd43d2`. Chi tiết: `docs/plans/PHASE_7_COMPLETION_REPORT.md §L`. Không sửa mục tiêu/scope/DoD Phase 7. | MVP Release Gate PASS. |
