@@ -96,6 +96,24 @@ class AttemptOrchestrator:
         with self._uow_factory() as uow:
             return uow.execution_attempts.get(ExecutionAttemptId(attempt_id)).attempt_no
 
+    def find_recoverable_window3(self, run_id: str, logical_action_id: str) -> str | None:
+        """Return settled SUCCEEDED attempt ID for Window 3 recovery, else None.
+
+        Window 3: the process crashed after ``after_execute`` persisted SUCCEEDED but
+        before LangGraph committed the graph checkpoint. On the next invocation the graph
+        re-enters the test node. This method detects the settled attempt so the adapter
+        can return the cached compact outcome without re-running the backend.
+
+        Returns None if any active attempt exists (normal concurrent run) or if the most
+        recent settled attempt is FAILED (normal retry — the graph committed that state).
+        """
+        run_id_vo = WorkflowRunId(run_id)
+        with self._uow_factory() as uow:
+            if uow.execution_attempts.find_active(run_id_vo, logical_action_id) is not None:
+                return None
+            settled = uow.execution_attempts.find_settled_succeeded(run_id_vo, logical_action_id)
+            return settled.id.value if settled is not None else None
+
     @staticmethod
     def _is_stale(attempt: ExecutionAttempt, now: UtcTimestamp) -> bool:
         """Return True when a STARTED attempt's owner lease has expired."""

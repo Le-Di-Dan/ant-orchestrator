@@ -24,6 +24,7 @@ from ant_orchestrator.core.domain.test_failure import (
     RecoveryDisposition,
     TestReasonCode,
 )
+from ant_orchestrator.integration import identity as _identity
 from ant_orchestrator.integration.test_evidence_persister import TestEvidencePersister
 from ant_orchestrator.workers.test.ant import TestAnt
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
@@ -100,6 +101,20 @@ class DurableTestExecution:
             return self._boundary_failure("context_digest_mismatch")
 
         logical_action_id = f"{task_id}-{_LOGICAL_ACTION_SUFFIX}"
+
+        # Window 3 protection: detect a settled SUCCEEDED attempt from a run that crashed
+        # after after_execute() but before the LangGraph checkpoint committed. Re-derive
+        # the deterministic evidence refs and return without calling the backend again.
+        w3_id = self._attempts.find_recoverable_window3(run_id, logical_action_id)
+        if w3_id is not None:
+            wr_id = _identity.test_worker_run_id(run_id, logical_action_id, w3_id)
+            ev_id = _identity.evidence_id(wr_id)
+            return TestExecutionOutcome(
+                outcome=WorkerOutcome.SUCCESS,
+                attempt_ref=w3_id,
+                evidence_refs=(f"worker_run:{wr_id}", f"evidence:{ev_id}"),
+            )
+
         attempt_id = self._attempts.before_execute(run_id, logical_action_id)
 
         scope = TestExecutionScope(

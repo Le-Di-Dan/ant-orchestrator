@@ -31,13 +31,12 @@ def _mock_ant(outcome: TestExecutionOutcome | None = None) -> MagicMock:
 def _mock_attempts(attempt_id: str = "att-1") -> MagicMock:
     ao = MagicMock()
     ao.before_execute.return_value = attempt_id
+    ao.find_recoverable_window3.return_value = None  # no Window 3 recovery by default
     return ao
 
 
 def _make_adapter(expected_digest: str = "") -> DurableTestExecution:
-    success = TestExecutionOutcome(
-        outcome=WorkerOutcome.SUCCESS, attempt_ref="att-ok"
-    )
+    success = TestExecutionOutcome(outcome=WorkerOutcome.SUCCESS, attempt_ref="att-ok")
     return DurableTestExecution(
         ant=_mock_ant(outcome=success),
         attempt_orchestrator=_mock_attempts(),
@@ -54,9 +53,7 @@ def _make_adapter(expected_digest: str = "") -> DurableTestExecution:
 
 def test_mismatch_digest_returns_boundary_failure_without_calling_ant() -> None:
     adapter = _make_adapter(expected_digest="abc123")
-    outcome = adapter.execute(
-        task_id="T1", run_id="R1", context_manifest_digest="deadbeef"
-    )
+    outcome = adapter.execute(task_id="T1", run_id="R1", context_manifest_digest="deadbeef")
     assert outcome.outcome is WorkerOutcome.PERMANENT_FAILURE
     assert outcome.disposition is RecoveryDisposition.TERMINAL_FAILED
     assert "mismatch" in (outcome.attempt_ref or "")
@@ -90,27 +87,21 @@ def test_matching_digest_calls_ant_normally() -> None:
         command_profile_key="pytest",
         expected_context_digest="correct-digest",
     )
-    outcome = adapter.execute(
-        task_id="T1", run_id="R1", context_manifest_digest="correct-digest"
-    )
+    outcome = adapter.execute(task_id="T1", run_id="R1", context_manifest_digest="correct-digest")
     assert outcome.outcome is WorkerOutcome.SUCCESS
     ant.execute.assert_called_once()
 
 
 def test_empty_expected_digest_skips_check_and_calls_ant() -> None:
     adapter = _make_adapter(expected_digest="")
-    outcome = adapter.execute(
-        task_id="T1", run_id="R1", context_manifest_digest="any-value"
-    )
+    outcome = adapter.execute(task_id="T1", run_id="R1", context_manifest_digest="any-value")
     # Empty expected → no check → ant runs → success.
     assert outcome.outcome is WorkerOutcome.SUCCESS
 
 
 def test_both_digests_empty_skips_check() -> None:
     adapter = _make_adapter(expected_digest="")
-    outcome = adapter.execute(
-        task_id="T1", run_id="R1", context_manifest_digest=""
-    )
+    outcome = adapter.execute(task_id="T1", run_id="R1", context_manifest_digest="")
     assert outcome.outcome is WorkerOutcome.SUCCESS
 
 

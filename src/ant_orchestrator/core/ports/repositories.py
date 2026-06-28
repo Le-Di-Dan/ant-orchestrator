@@ -137,6 +137,12 @@ class ExecutionAttemptRepository(Protocol):
         """Return the single active (PLANNED/STARTED) attempt, if any."""
         ...
 
+    def find_settled_succeeded(
+        self, run_id: WorkflowRunId, logical_action_id: str
+    ) -> ExecutionAttempt | None:
+        """Return the most recent SUCCEEDED attempt for Window 3 recovery, or None."""
+        ...
+
     def list_for_action(
         self, run_id: WorkflowRunId, logical_action_id: str
     ) -> Sequence[ExecutionAttempt]: ...

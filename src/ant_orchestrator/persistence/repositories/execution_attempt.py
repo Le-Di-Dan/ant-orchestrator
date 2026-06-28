@@ -102,6 +102,17 @@ class ExecutionAttemptRepository(ConnRepository):
         ).fetchone()
         return _to_attempt(row) if row is not None else None
 
+    def find_settled_succeeded(
+        self, run_id: WorkflowRunId, logical_action_id: str
+    ) -> ExecutionAttempt | None:
+        """Return the most recent SUCCEEDED attempt for the logical action, or None."""
+        row = self._conn.execute(
+            "SELECT * FROM execution_attempts WHERE workflow_run_id = ? "
+            "AND logical_action_id = ? AND status = ? ORDER BY attempt_no DESC LIMIT 1",
+            (run_id.value, logical_action_id, ExecutionAttemptStatus.SUCCEEDED.value),
+        ).fetchone()
+        return _to_attempt(row) if row is not None else None
+
     def list_for_action(
         self, run_id: WorkflowRunId, logical_action_id: str
     ) -> Sequence[ExecutionAttempt]:
