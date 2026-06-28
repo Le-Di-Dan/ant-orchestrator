@@ -31,7 +31,7 @@ def _mock_ant(outcome: TestExecutionOutcome | None = None) -> MagicMock:
 def _mock_attempts(attempt_id: str = "att-1") -> MagicMock:
     ao = MagicMock()
     ao.before_execute.return_value = attempt_id
-    ao.find_recoverable_window3.return_value = None  # no Window 3 recovery by default
+    ao.find_recoverable_settled_attempt.return_value = None  # no Window 3 recovery by default
     return ao
 
 

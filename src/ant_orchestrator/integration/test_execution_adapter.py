@@ -13,6 +13,7 @@ time fails closed if the incoming digest differs (e.g., a corrupt or replayed st
 from __future__ import annotations
 
 import hashlib
+import json as _json
 import time
 
 from ant_orchestrator.application.ports.test_execution import TestExecutionOutcome
@@ -27,15 +28,57 @@ from ant_orchestrator.core.domain.test_failure import (
 from ant_orchestrator.integration import identity as _identity
 from ant_orchestrator.integration.test_evidence_persister import TestEvidencePersister
 from ant_orchestrator.workers.test.ant import TestAnt
-from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
+from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator, RecoveredAttempt
 
 _LOGICAL_ACTION_SUFFIX = "test"
+_COMPACT_OUTCOME_VERSION = 1
 
 
 def _scope_digest(scope: tuple[str, ...]) -> str:
     """Stable SHA-256 hex of the canonical read scope (NUL-joined, sorted)."""
     content = "\x00".join(sorted(scope))
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _to_compact_json(outcome: TestExecutionOutcome) -> str:
+    """Serialize the routing-relevant facets of an outcome for durable storage.
+
+    ``evidence_refs`` are excluded — they are re-derived from the identity chain on recovery.
+    """
+    return _json.dumps(
+        {
+            "v": _COMPACT_OUTCOME_VERSION,
+            "outcome": outcome.outcome.value,
+            "disposition": outcome.disposition.value if outcome.disposition else None,
+            "reason_code": outcome.reason_code.value if outcome.reason_code else None,
+            "category": outcome.category.value if outcome.category else None,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _from_compact_json(
+    json_str: str, attempt_id: str, evidence_refs: tuple[str, ...]
+) -> TestExecutionOutcome | None:
+    """Deserialize compact outcome; return None on version mismatch or corrupt data."""
+    try:
+        d = _json.loads(json_str)
+        if d.get("v") != _COMPACT_OUTCOME_VERSION:
+            return None
+        outcome_val = WorkerOutcome(d["outcome"])
+        disp_val = d.get("disposition")
+        rcode_val = d.get("reason_code")
+        cat_val = d.get("category")
+        return TestExecutionOutcome(
+            outcome=outcome_val,
+            attempt_ref=attempt_id,
+            disposition=RecoveryDisposition(disp_val) if disp_val else None,
+            reason_code=TestReasonCode(rcode_val) if rcode_val else None,
+            category=FailureCategory(cat_val) if cat_val else None,
+            evidence_refs=evidence_refs,
+        )
+    except (KeyError, ValueError):
+        return None
 
 
 class DurableTestExecution:
@@ -102,18 +145,12 @@ class DurableTestExecution:
 
         logical_action_id = f"{task_id}-{_LOGICAL_ACTION_SUFFIX}"
 
-        # Window 3 protection: detect a settled SUCCEEDED attempt from a run that crashed
-        # after after_execute() but before the LangGraph checkpoint committed. Re-derive
-        # the deterministic evidence refs and return without calling the backend again.
-        w3_id = self._attempts.find_recoverable_window3(run_id, logical_action_id)
-        if w3_id is not None:
-            wr_id = _identity.test_worker_run_id(run_id, logical_action_id, w3_id)
-            ev_id = _identity.evidence_id(wr_id)
-            return TestExecutionOutcome(
-                outcome=WorkerOutcome.SUCCESS,
-                attempt_ref=w3_id,
-                evidence_refs=(f"worker_run:{wr_id}", f"evidence:{ev_id}"),
-            )
+        # Window 3 recovery: detect any settled attempt (SUCCEEDED or FAILED) from a run
+        # that crashed after after_execute() but before the LangGraph checkpoint committed.
+        # Reconstruct the compact outcome from durable authority without calling the backend.
+        recovered = self._attempts.find_recoverable_settled_attempt(run_id, logical_action_id)
+        if recovered is not None:
+            return self._recover_settled_outcome(recovered, run_id, logical_action_id)
 
         attempt_id = self._attempts.before_execute(run_id, logical_action_id)
 
@@ -160,8 +197,13 @@ class DurableTestExecution:
         outcome = result.outcome
         if outcome is None:
             # Defensive: assemble() should always produce an outcome for non-cancelled runs.
-            self._attempts.after_execute(attempt_id, WorkerOutcome.PERMANENT_FAILURE)
-            return self._boundary_failure("missing_outcome")
+            boundary = self._boundary_failure("missing_outcome")
+            self._attempts.after_execute(
+                attempt_id,
+                WorkerOutcome.PERMANENT_FAILURE,
+                compact_json=_to_compact_json(boundary),
+            )
+            return boundary
 
         evidence_refs = self._persist_evidence(
             task_id=task_id,
@@ -172,12 +214,19 @@ class DurableTestExecution:
             wall_time_ms=wall_time_ms,
             context_manifest_digest=context_manifest_digest,
         )
-        self._attempts.after_execute(attempt_id, outcome.outcome)
-        # Merge persisted evidence refs into the compact outcome.
-        merged_refs = tuple(outcome.evidence_refs) + tuple(evidence_refs)
-        from dataclasses import replace
+        # Merge evidence refs before serialising so compact JSON carries no refs
+        # (refs are re-derived from identity on recovery, not stored).
+        from dataclasses import replace as _replace
 
-        return replace(outcome, evidence_refs=merged_refs)
+        merged_outcome = _replace(
+            outcome, evidence_refs=tuple(outcome.evidence_refs) + tuple(evidence_refs)
+        )
+        self._attempts.after_execute(
+            attempt_id,
+            outcome.outcome,
+            compact_json=_to_compact_json(outcome),  # store without evidence_refs
+        )
+        return merged_outcome
 
     def _persist_evidence(
         self,
@@ -217,6 +266,45 @@ class DurableTestExecution:
         return (
             f"worker_run:{persisted.worker_run_id}",
             f"evidence:{persisted.evidence_id}",
+        )
+
+    def _recover_settled_outcome(
+        self,
+        recovered: RecoveredAttempt,
+        run_id: str,
+        logical_action_id: str,
+    ) -> TestExecutionOutcome:
+        """Reconstruct compact outcome for Window 3 replay without calling the backend."""
+        attempt_id = recovered.attempt_id
+        wr_id = _identity.test_worker_run_id(run_id, logical_action_id, attempt_id)
+        ev_id = _identity.evidence_id(wr_id)
+        evidence_refs = (f"worker_run:{wr_id}", f"evidence:{ev_id}")
+
+        # Backward compat: pre-CP6-correction SUCCEEDED row has no compact JSON.
+        if recovered.is_succeeded and recovered.compact_json is None:
+            return TestExecutionOutcome(
+                outcome=WorkerOutcome.SUCCESS,
+                attempt_ref=attempt_id,
+                evidence_refs=evidence_refs,
+            )
+
+        if recovered.compact_json is not None:
+            result = _from_compact_json(recovered.compact_json, attempt_id, evidence_refs)
+            if result is not None:
+                return result
+
+        # Missing or corrupt compact outcome → fail closed (never re-run the backend).
+        return self._indeterminate_outcome(attempt_id)
+
+    @staticmethod
+    def _indeterminate_outcome(attempt_id: str) -> TestExecutionOutcome:
+        """Safe escalation when recovery authority is absent or corrupt (fail-closed)."""
+        return TestExecutionOutcome(
+            outcome=WorkerOutcome.ESCALATION,
+            attempt_ref=attempt_id,
+            disposition=RecoveryDisposition.ESCALATE,
+            reason_code=TestReasonCode.UNKNOWN_FAILURE,
+            category=FailureCategory.UNKNOWN,
         )
 
     @staticmethod

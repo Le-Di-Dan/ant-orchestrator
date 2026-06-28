@@ -5,7 +5,7 @@ the eight crash windows that can occur during Test Ant execution:
 
 Window 1: crash before backend runs (STARTED attempt exists) → reuse attempt.
 Window 2: crash after backend, before settle (still STARTED) → INDETERMINATE on stale.
-Window 3: crash after settle SUCCEEDED, before graph commit → no backend re-run.
+Window 3: crash after settle (SUCCEEDED or FAILED), before graph commit → no backend re-run.
 Window 4: evidence written, energy not → energy written exactly once on recovery.
 Window 5: energy written, state/report not committed → no double energy.
 Windows 6-8 (handoff idempotency) are covered by CP5; this file adds regression checks.
@@ -258,17 +258,16 @@ def test_window3_no_attempt_created(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Window 3 FAILED — documented deviation (fail-safe semantics)
+# Window 3 FAILED — CP6 correction: FAILED is now recovered without backend rerun
 # ---------------------------------------------------------------------------
 
 
-def test_window3_failed_creates_new_attempt(tmp_path: Path) -> None:
-    """Window 3 (FAILED): architecture cannot reuse FAILED attempt without attempt_hint.
+def test_window3_failed_find_recoverable_window3_still_succeeded_only(tmp_path: Path) -> None:
+    """find_recoverable_window3 (legacy API) still returns None for FAILED.
 
-    Documented deviation: crash after FAILED settle before graph commit creates a new
-    attempt and re-runs the backend. This is the fail-safe behavior for the FAILED case.
-    Evidence/energy written for the new attempt have different IDs (no conflict).
-    Window 3 exact-once is only guaranteed for SUCCEEDED case via find_recoverable_window3.
+    The legacy method is SUCCEEDED-only. The adapter now calls
+    find_recoverable_settled_attempt() which covers FAILED. This test guards the
+    backward-compat contract of the legacy method.
     """
     clock = _clock()
     db = _make_db(tmp_path, clock)
@@ -279,9 +278,13 @@ def test_window3_failed_creates_new_attempt(tmp_path: Path) -> None:
     id1 = orch.before_execute("R1", "T1-test")
     orch.after_execute(id1, WorkerOutcome.PERMANENT_FAILURE)
 
-    # Window 3 FAILED: find_recoverable_window3 returns None (only checks SUCCEEDED).
-    recovered = orch.find_recoverable_window3("R1", "T1-test")
-    assert recovered is None, "FAILED attempt is not recovered in Window 3 (by design)"
+    # Legacy method: SUCCEEDED-only → returns None for FAILED.
+    assert orch.find_recoverable_window3("R1", "T1-test") is None
+    # New general method: covers FAILED → not None.
+    recovered = orch.find_recoverable_settled_attempt("R1", "T1-test")
+    assert recovered is not None
+    assert recovered.attempt_id == id1
+    assert not recovered.is_succeeded
 
 
 # ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ _COLUMNS = (
     "lease_expires_at, started_at, completed_at, outcome, created_at"
 )
 _ACTIVE = (ExecutionAttemptStatus.PLANNED.value, ExecutionAttemptStatus.STARTED.value)
+_SETTLED = (ExecutionAttemptStatus.SUCCEEDED.value, ExecutionAttemptStatus.FAILED.value)
 
 
 def _to_attempt(row: sqlite3.Row) -> ExecutionAttempt:
@@ -110,6 +111,17 @@ class ExecutionAttemptRepository(ConnRepository):
             "SELECT * FROM execution_attempts WHERE workflow_run_id = ? "
             "AND logical_action_id = ? AND status = ? ORDER BY attempt_no DESC LIMIT 1",
             (run_id.value, logical_action_id, ExecutionAttemptStatus.SUCCEEDED.value),
+        ).fetchone()
+        return _to_attempt(row) if row is not None else None
+
+    def find_latest_settled_attempt(
+        self, run_id: WorkflowRunId, logical_action_id: str
+    ) -> ExecutionAttempt | None:
+        """Return the most recent SUCCEEDED or FAILED attempt, or None."""
+        row = self._conn.execute(
+            "SELECT * FROM execution_attempts WHERE workflow_run_id = ? "
+            "AND logical_action_id = ? AND status IN (?, ?) ORDER BY attempt_no DESC LIMIT 1",
+            (run_id.value, logical_action_id, *_SETTLED),
         ).fetchone()
         return _to_attempt(row) if row is not None else None
 
