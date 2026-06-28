@@ -36,7 +36,7 @@ from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
 from ant_orchestrator.workers.documentation.ant import DocumentationAnt
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 from tests.conftest import SequentialIdGenerator
-from tests.test_phase5_cp5_documentation import (
+from tests.support.cp5_harness import (
     _TARGET,
     RecordingComposer,
     _artifacts,

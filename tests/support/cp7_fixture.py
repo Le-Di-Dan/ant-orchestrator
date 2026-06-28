@@ -30,7 +30,9 @@ from ant_orchestrator.application.ports.documentation_composer import (
 )
 from ant_orchestrator.application.ports.llm import ModelUsage
 from ant_orchestrator.application.services.context_preparation import ContextPreparationService
+from ant_orchestrator.application.services.search_memory import SearchMemory
 from ant_orchestrator.cli.workflow_composition import WorkflowServices, build_workflow_services
+from ant_orchestrator.composition import make_memory_retriever
 from ant_orchestrator.config.constants import DOC_PROMPT_TEMPLATE_ID
 from ant_orchestrator.context.estimator import CharacterHeuristicEstimator
 from ant_orchestrator.context.package import ContextPackageBuilder
@@ -48,6 +50,7 @@ from ant_orchestrator.integration.documentation_preparer import (
 from ant_orchestrator.integration.proposal_store import ProposalStore
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migrations import SqliteDatabaseBootstrapper
+from ant_orchestrator.persistence.repositories.memory import SqliteMemoryRepository
 from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
 from ant_orchestrator.security.path_policy import PathPolicy, PathScope
 from ant_orchestrator.security.protected_path_policy import ProtectedPathPolicy
@@ -159,8 +162,12 @@ def build_services(
         clock=clock,
         id_gen=ids,
     )
+    search = SearchMemory(SqliteMemoryRepository(database), audit, clock=clock, ids=ids)
+    retriever = make_memory_retriever(search)
     context_service = ContextPreparationService(
-        ContextSourcePreparerImpl(builder, ContextPackageStore(artifacts_root))
+        ContextSourcePreparerImpl(
+            builder, ContextPackageStore(artifacts_root), memory_retriever=retriever
+        )
     )
     policy = ProtectedPathPolicy(
         scope=PathScope.build(read_roots=(), write_roots=(handoffs,)),

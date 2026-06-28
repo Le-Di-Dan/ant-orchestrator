@@ -27,7 +27,7 @@ from ant_orchestrator.workflows.graph_support import (
 )
 from ant_orchestrator.workflows.nodes import PHASE_FAILED, PHASE_VALIDATE
 from tests.conftest import FakeClock, SequentialIdGenerator
-from tests.test_phase5_cp5_documentation import _policy
+from tests.support.cp5_harness import _policy
 
 
 class _FakeComposer:

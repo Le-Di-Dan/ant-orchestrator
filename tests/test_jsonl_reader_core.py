@@ -43,7 +43,9 @@ def _write(logs_dir: Path, date_str: str, lines: list[str]) -> None:
     (logs_dir / f"audit-{date_str}.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _query(limit: int = 10, task_id: str | None = None, since: datetime | None = None) -> AuditLogQuery:
+def _query(
+    limit: int = 10, task_id: str | None = None, since: datetime | None = None
+) -> AuditLogQuery:
     return AuditLogQuery(task_id=task_id, limit=limit, since=since)
 
 

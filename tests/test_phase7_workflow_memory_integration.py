@@ -303,3 +303,26 @@ def test_state_fields_are_json_safe(tmp_path: Path) -> None:
     assert isinstance(serialized, str)
     assert "TaskId" not in serialized
     assert "UtcTimestamp" not in serialized
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6: audit persistence — MEMORY_RETRIEVAL event emitted to real sink
+# ---------------------------------------------------------------------------
+
+
+def test_search_memory_emits_audit_event_to_sink(tmp_path: Path) -> None:
+    from ant_orchestrator.application.ports.audit import AuditEventType
+
+    db = _setup_db(tmp_path)
+    repo = SqliteMemoryRepository(db)
+    audit = FakeAuditSink()
+    ids = SequentialIdGenerator()
+    search = SearchMemory(repo, audit, clock=FakeClock(_TS), ids=ids)
+
+    _seed_task(db, "T-AUD")
+    _seed_record(repo, "M-AUD", "T-AUD")
+
+    doc_preparer, _ = _build_preparer(tmp_path, search)
+    doc_preparer.prepare("R-aud", _request(action_id="aud-1"), task_id=TaskId("T-AUD"))
+
+    assert any(e.event_type is AuditEventType.MEMORY_RETRIEVAL for e in audit.events)

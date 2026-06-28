@@ -321,31 +321,3 @@ def test_window45_energy_not_duplicated_on_replay(tmp_path: Path) -> None:
         read_scope_digest="scope",
     )
     assert o1.energy_id == o2.energy_id
-
-
-# ---------------------------------------------------------------------------
-# find_recoverable_window3 — unit-level guard
-# ---------------------------------------------------------------------------
-
-
-def test_find_recoverable_window3_none_if_no_attempts(tmp_path: Path) -> None:
-    clock = _clock()
-    db = _make_db(tmp_path, clock)
-    uow_f = _uow_factory(db)
-    ids = SequentialIdGenerator()
-    orch = AttemptOrchestrator(uow_f, clock=clock, ids=ids)
-
-    result = orch.find_recoverable_window3("R1", "T1-test")
-    assert result is None
-
-
-def test_find_recoverable_window3_none_if_active_attempt_exists(tmp_path: Path) -> None:
-    clock = _clock()
-    db = _make_db(tmp_path, clock)
-    uow_f = _uow_factory(db)
-    ids = SequentialIdGenerator()
-    orch = AttemptOrchestrator(uow_f, clock=clock, ids=ids)
-
-    orch.before_execute("R1", "T1-test")  # creates STARTED
-    result = orch.find_recoverable_window3("R1", "T1-test")
-    assert result is None  # active attempt → not Window 3

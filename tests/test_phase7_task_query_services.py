@@ -303,14 +303,13 @@ def test_get_worker_run_detail_evidence_listed() -> None:
 
 def test_search_memory_no_persistence_import() -> None:
     import ast
+
     import ant_orchestrator
 
     pkg = Path(ant_orchestrator.__file__).parent
     svc_file = pkg / "application" / "services" / "search_memory.py"
     tree = ast.parse(svc_file.read_text(encoding="utf-8"))
-    modules = {
-        n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module
-    }
+    modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     for mod in modules:
         assert not mod.startswith("ant_orchestrator.persistence")
         assert not mod.startswith("ant_orchestrator.adapters")
@@ -318,13 +317,12 @@ def test_search_memory_no_persistence_import() -> None:
 
 def test_get_task_detail_no_persistence_import() -> None:
     import ast
+
     import ant_orchestrator
 
     pkg = Path(ant_orchestrator.__file__).parent
     svc_file = pkg / "application" / "services" / "get_task_detail.py"
     tree = ast.parse(svc_file.read_text(encoding="utf-8"))
-    modules = {
-        n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module
-    }
+    modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     for mod in modules:
         assert not mod.startswith("ant_orchestrator.persistence")

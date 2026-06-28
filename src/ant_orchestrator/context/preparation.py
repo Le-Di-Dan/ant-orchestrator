@@ -33,6 +33,7 @@ from ant_orchestrator.context.estimator import TokenEstimator
 from ant_orchestrator.context.memory import select_memory_for_context
 from ant_orchestrator.context.package import ContextPackageBuilder
 from ant_orchestrator.context.store import ContextPackageStore
+from ant_orchestrator.core.domain.errors import InvariantViolation
 from ant_orchestrator.core.domain.query import MemorySearchCriteria
 from ant_orchestrator.core.domain.records import MemoryRecord
 from ant_orchestrator.core.domain.value_objects import TaskId
@@ -81,8 +82,10 @@ class ContextSourcePreparerImpl:
     def _build_memory_selection(
         self, request: ContextPreparationInput
     ) -> MemoryContextSelection | None:
-        if request.memory_criteria is None or self._memory_retriever is None:
+        if request.memory_criteria is None:
             return None
+        if self._memory_retriever is None:
+            raise InvariantViolation("memory_criteria is set but no memory_retriever was injected")
         criteria = request.memory_criteria
         records = self._memory_retriever(criteria)
         candidates = tuple(from_memory_record(r) for r in records)

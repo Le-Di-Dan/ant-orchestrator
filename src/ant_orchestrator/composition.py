@@ -12,7 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ant_orchestrator.application.ports.audit import AuditEvent
+from ant_orchestrator.application.ports.audit import AuditEvent, AuditSink
 from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
     WorkflowDocumentationPreparer,
@@ -48,7 +48,7 @@ from ant_orchestrator.workspace.layout import (
 
 
 class _NullAuditSink:
-    """Discards all audit events — placeholder until a real sink is wired via CLI."""
+    """Discards all audit events — used as default when no real sink is injected."""
 
     def write(self, event: AuditEvent) -> None:
         pass
@@ -93,6 +93,7 @@ def build_workflow_services(
     *,
     documentation_execution: DocumentationExecutionPort | None = None,
     documentation_preparer: WorkflowDocumentationPreparer | None = None,
+    audit_sink: AuditSink | None = None,
 ) -> WorkflowServices:
     """Discover the Nest from ``start`` and assemble all workflow services.
 
@@ -113,8 +114,9 @@ def build_workflow_services(
     def uow_factory() -> SqliteUnitOfWork:
         return SqliteUnitOfWork(database)
 
+    effective_sink: AuditSink = audit_sink if audit_sink is not None else _NullAuditSink()
     memory_repo = SqliteMemoryRepository(database)
-    search_memory = SearchMemory(memory_repo, _NullAuditSink(), clock=clock, ids=ids)
+    search_memory = SearchMemory(memory_repo, effective_sink, clock=clock, ids=ids)
 
     runner = WorkflowRunner(
         worker=DeterministicStubAdapter(),
