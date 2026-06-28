@@ -177,3 +177,13 @@ TERMINAL_HANDOFF_SCHEMA_VERSION: Final = 1
 MAX_TERMINAL_HANDOFF_BYTES: Final = 8_192
 MAX_HANDOFF_SUMMARY_CHARS: Final = 400
 MAX_HANDOFF_NEXT_STEPS_CHARS: Final = 400
+
+# --- Phase 7: memory retrieval limits and API bind surface -------------------
+MEMORY_DEFAULT_LIMIT: Final = 20
+MEMORY_MAX_LIMIT: Final = 100
+
+LOG_DEFAULT_LIMIT: Final = 50
+LOG_MAX_LIMIT: Final = 200
+
+API_BIND_HOST: Final = "127.0.0.1"
+API_BIND_PORT: Final = 8080

@@ -39,6 +39,7 @@ class AuditEventType(Enum):
     ENERGY_RESERVATION = "energy_reservation"
     ROUTING_DECISION = "routing_decision"
     ENERGY_ENFORCEMENT = "energy_enforcement"
+    MEMORY_RETRIEVAL = "memory_retrieval"
 
 
 @dataclass(frozen=True, slots=True)
