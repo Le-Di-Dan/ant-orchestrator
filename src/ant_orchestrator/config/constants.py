@@ -123,3 +123,27 @@ DOC_PROMPT_TEMPLATE_VERSION: Final = 1
 MAX_PROVIDER_ID_CHARS: Final = 64
 # A raw model output larger than this is rejected before parsing (defence-in-depth).
 MAX_MODEL_OUTPUT_CHARS: Final = 400_000
+
+# Phase 6 CP2 — enforceable Test Ant container isolation (ADR-0007). The MVP backend is
+# local Docker pinned to an IMMUTABLE, content-addressable image identity (the sha256
+# image ID), verified present at preflight and NEVER pulled at run time. The host uses the
+# containerd image store, where the image ID — not the mutable tag or a registry
+# RepoDigest — is the form both ``docker image inspect`` and ``docker run`` resolve.
+TEST_ISOLATION_IMAGE_REPO: Final = "python"
+TEST_ISOLATION_IMAGE_ID: Final = (
+    "sha256:9800957d2a88867f853ce6072ae1669e37fa269cc6f76009fa1aef4757f62212"
+)
+TEST_ISOLATION_IMAGE_REF: Final = TEST_ISOLATION_IMAGE_ID
+# Deterministic container identity + least-privilege runtime limits (validated on host).
+TEST_CONTAINER_NAME_PREFIX: Final = "ant-test-"
+TEST_CONTAINER_USER: Final = "1000:1000"
+TEST_CONTAINER_PIDS_LIMIT: Final = 256
+TEST_CONTAINER_MEMORY: Final = "512m"
+TEST_CONTAINER_TMPFS_SIZE: Final = "64m"
+TEST_CONTAINER_WORK_MOUNT: Final = "/work"
+TEST_CONTAINER_OUT_MOUNT: Final = "/out"
+TEST_EXECUTION_DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
+# Exact-byte snapshot bounds (defence-in-depth against runaway scope).
+MAX_SNAPSHOT_FILES: Final = 5000
+MAX_SNAPSHOT_TOTAL_BYTES: Final = 67_108_864
+MAX_SNAPSHOT_FILE_BYTES: Final = 8_388_608

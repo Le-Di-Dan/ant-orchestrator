@@ -467,3 +467,41 @@ Deviations nhỏ so với §E, có evidence repository (không đổi thiết k�
 Tuân thủ: 5 file source mới đều ≤350 dòng; mypy strict `src` clean; ruff lint/format clean; 88 test CP1
 xanh + full suite 1474 passed/12 skipped (skip là live/container-gated có sẵn). Không Docker/subprocess/
 LangGraph/persistence/energy trong CP1. Không sửa ROADMAP. Phase 6 vẫn `NOT_STARTED` cho tới CP8.
+
+### CP2 — Enforceable isolation backend, snapshot & command profiles (đã triển khai)
+
+Deviations nhỏ so với §D.4/§E, có evidence repository (không đổi thiết kế tổng):
+
+1. **Image pin = content-addressable IMAGE ID, KHÔNG phải `repo@sha256:<RepoDigest>`.**
+   - *Plan expectation* (§D.4): image pin theo digest dạng `repository@sha256:…`.
+   - *Repository evidence*: host dùng **containerd image store** (Docker Desktop 4.38). Trên store này
+     `docker image inspect`/`run` chỉ resolve theo **image ID** `sha256:9800957d…` (verified bằng probe);
+     `python:3.11` (tag) và `python@sha256:<RepoDigest>` đều trả "No such image". Giá trị Phase 5 ghi là
+     image ID (config digest), không phải RepoDigest.
+   - *Decision*: `TEST_ISOLATION_IMAGE_ID = sha256:9800957d…` (immutable, content-addressable) dùng cho cả
+     capability inspect lẫn run; không auto-pull. Capability fail-closed nếu inspect ID ≠ 0.
+   - *Impact CP sau*: CP3/CP7 dùng cùng image ID; nếu chạy trên host khác phải verify/đổi ID (hoặc đổi sang
+     RepoDigest nếu store là classic) — ghi ở constants.
+
+2. **Backend gọi Docker qua `ShellAdapter` port (bounded shell), KHÔNG sửa `bounded_shell.py`.**
+   - *Plan expectation* (§B): optional thêm `env` cho `bounded_shell`.
+   - *Repository evidence*: inner container env truyền bằng `--env KEY=VALUE` argv; host Docker CLI kế thừa
+     env tối thiểu của tiến trình cha. Không cần env additive ở bounded_shell → tránh đụng module nhạy cảm
+     (giữ mọi test bounded_shell cũ xanh, `subprocess` vẫn confine đúng một nơi).
+   - *Impact CP sau*: nếu sau này cần env host tối thiểu hoá cho Docker CLI, vẫn có thể thêm additive ở CP3.
+
+3. **Lifecycle = `docker run --name <unique>` (no `--rm`) + luôn `docker rm -f`.** Đúng khuyến nghị §5
+   (kiểm soát timeout/process-tree). `--mount type=bind` (không `-v`) để host path Windows có drive `:`
+   không nhập nhằng. Inner command là **file `.py` trong snapshot** (`python <probe>.py`) vì inner argv đi
+   qua `CommandPolicy` (metachar/newline bị chặn) — `python -c "multi;line"` không khả thi.
+
+4. **`IsolatedExecutionSpec` (CP1) không có targets/argv → inner command do `command_profile_key` quyết định
+   hoàn toàn; acceptance chạy toàn bộ snapshot (không narrowing).** Target validation vẫn test ở profile/
+   resolver layer. Truyền targets xuyên port (nếu CP3 cần) có thể là field additive ở CP3 — chưa đụng CP1.
+
+Tuân thủ: 5 file source CP2 đều ≤350 dòng (max 276); mypy strict `src` clean; ruff lint/format clean;
+unit/contract CP2 xanh + **Docker enforcement integration 4/4 PASS thật trên host** (work read-only denied,
+out writable, rootfs denied, non-root uid, `.git` không mount, network denied, canonical bất biến,
+child-process contained, timeout kill container). Backend unavailable → fail-closed (no host fallback).
+Không LangGraph/persistence/energy/handoff/Test-Ant-worker trong CP2. Không sửa ROADMAP. Phase 6 vẫn
+`NOT_STARTED` cho tới CP8.
