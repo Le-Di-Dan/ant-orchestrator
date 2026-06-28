@@ -443,7 +443,12 @@ Test Ant; retrieval nâng cao; sửa document protected.
 
 ### Phase 6 — Test Ant, Retry/Regroup/Escalate & MVP Workflow Completion
 
-**Trạng thái**: `NOT_STARTED`
+**Trạng thái**: `COMPLETED`
+
+> Completion report: `docs/plans/PHASE_6_COMPLETION_REPORT.md` (commit `0818679`).
+> Closure audit: **PASS** — 1786 passed / 15 skipped / 0 failed.
+> Commit chain: CP1 `6f4c171` → CP2 `280b2b5` → CP3 `fc91215` → CP4 `3d567b4` → CP5 `035b5fa`
+> → CP6 `adf20eb` → CP6-correction `e744eba` → CP7 `f7a0967`.
 
 #### Mục tiêu
 Hoàn tất vòng lặp MVP với cả hai worker frozen — **Full MVP Candidate**.
