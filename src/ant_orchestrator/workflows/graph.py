@@ -15,10 +15,9 @@ from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
 )
 from ant_orchestrator.application.ports.test_execution import (
-    TestExecutionOutcome,
     TestExecutionPort,
 )
-from ant_orchestrator.application.ports.worker import WorkerExecutionPort, WorkerOutcome
+from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.config.constants import WORKFLOW_DEFINITION_VERSION
 from ant_orchestrator.workflows.attempt_orchestrator import AttemptOrchestrator
 from ant_orchestrator.workflows.cancellation_probe import CancellationProbe
@@ -41,6 +40,7 @@ from ant_orchestrator.workflows.graph_support import (
     bind_approval,
     build_escalation_payload,
     execute_documentation_node,
+    execute_test_port,
     intent_from_state,
     intent_to_state,
     last_outcome,
@@ -93,48 +93,6 @@ def _apply_route(delta: dict[str, object], state: GraphState, route: dict[str, o
             reason="escalation",
         )
         delta["action_intent"] = action_intent
-
-
-# Compact test outcome → routing status for node ``test``.
-_TEST_STATUS: dict[WorkerOutcome, str] = {
-    WorkerOutcome.SUCCESS: "pass",
-    WorkerOutcome.RETRYABLE_FAILURE: "retryable",
-    WorkerOutcome.ESCALATION: "escalate",
-    WorkerOutcome.PERMANENT_FAILURE: "fatal",
-}
-
-
-def _execute_test_port(
-    port: TestExecutionPort, state: GraphState, run_id: str
-) -> dict[str, object]:
-    """Call the TestExecutionPort and fold its compact outcome into graph state.
-
-    No classifier logic, no retry policy, no Docker — only the impure call and state
-    delta. Cancellation (TERMINAL_CANCELLED disposition) routes directly to CANCELLED.
-    """
-    outcome: TestExecutionOutcome = port.execute(
-        task_id=str(state.get("task_id", "")),
-        run_id=run_id,
-        context_manifest_digest=str(state.get("manifest_digest") or ""),
-    )
-    if outcome.is_cancelled:
-        return {"phase": PHASE_CANCELLED}
-    delta: dict[str, object] = {
-        "phase": PHASE_VALIDATE,
-        "test_status": _TEST_STATUS.get(outcome.outcome, "escalate"),
-        "test_outcome": outcome.outcome.value,
-        "test_attempt_ref": outcome.attempt_ref,
-        "test_logical_action_ref": outcome.attempt_ref,  # stable action bound to attempt
-    }
-    if outcome.category is not None:
-        delta["test_failure_category"] = outcome.category.value
-    if outcome.reason_code is not None:
-        delta["test_reason_code"] = outcome.reason_code.value
-    if outcome.disposition is not None:
-        delta["test_recovery_disposition"] = outcome.disposition.value
-    if outcome.evidence_refs:
-        delta["test_evidence_refs"] = list(outcome.evidence_refs)
-    return delta
 
 
 def build_workflow_graph(
@@ -210,7 +168,7 @@ def build_workflow_graph(
         if test_execution is None:
             # Legacy mode: no test port injected → deterministic pass-through.
             return {"phase": PHASE_VALIDATE, "test_status": "pass"}
-        return _execute_test_port(test_execution, state, run_id)
+        return execute_test_port(test_execution, state, run_id)
 
     def validate(state: GraphState) -> dict[str, object]:
         test_status = state.get("test_status")

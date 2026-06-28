@@ -15,6 +15,10 @@ from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionOutcome,
     DocumentationExecutionPort,
 )
+from ant_orchestrator.application.ports.test_execution import (
+    TestExecutionOutcome,
+    TestExecutionPort,
+)
 from ant_orchestrator.application.ports.worker import WorkerActionIntent, WorkerOutcome
 from ant_orchestrator.core.domain.enums import ApprovalContinuation, GateType
 from ant_orchestrator.workflows.routing import (
@@ -250,6 +254,46 @@ def bind_approval(delta: dict[str, object], intent: dict[str, object], state: Gr
         delta["error_summary"] = "approval_binding_mismatch"
         return
     delta["approval_ref"] = str(intent.get("gate_instance_id", ""))
+
+
+# Compact test outcome → routing status for node ``test``.
+_TEST_STATUS: dict[WorkerOutcome, str] = {
+    WorkerOutcome.SUCCESS: "pass",
+    WorkerOutcome.RETRYABLE_FAILURE: "retryable",
+    WorkerOutcome.ESCALATION: "escalate",
+    WorkerOutcome.PERMANENT_FAILURE: "fatal",
+}
+
+
+def execute_test_port(port: TestExecutionPort, state: GraphState, run_id: str) -> dict[str, object]:
+    """Call the TestExecutionPort and fold its compact outcome into graph state.
+
+    No classifier logic, no retry policy, no Docker — only the impure call and state
+    delta. Cancellation (TERMINAL_CANCELLED disposition) routes directly to CANCELLED.
+    """
+    outcome: TestExecutionOutcome = port.execute(
+        task_id=str(state.get("task_id", "")),
+        run_id=run_id,
+        context_manifest_digest=str(state.get("manifest_digest") or ""),
+    )
+    if outcome.is_cancelled:
+        return {"phase": PHASE_CANCELLED}
+    delta: dict[str, object] = {
+        "phase": PHASE_VALIDATE,
+        "test_status": _TEST_STATUS.get(outcome.outcome, "escalate"),
+        "test_outcome": outcome.outcome.value,
+        "test_attempt_ref": outcome.attempt_ref,
+        "test_logical_action_ref": outcome.attempt_ref,
+    }
+    if outcome.category is not None:
+        delta["test_failure_category"] = outcome.category.value
+    if outcome.reason_code is not None:
+        delta["test_reason_code"] = outcome.reason_code.value
+    if outcome.disposition is not None:
+        delta["test_recovery_disposition"] = outcome.disposition.value
+    if outcome.evidence_refs:
+        delta["test_evidence_refs"] = list(outcome.evidence_refs)
+    return delta
 
 
 def execute_documentation_node(

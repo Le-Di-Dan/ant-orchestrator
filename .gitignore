@@ -21,3 +21,6 @@ venv/
 .env.*
 !.env.example
 !.env.template
+
+# Test fixture wheels (installed from PyPI at Docker build time, not committed)
+tests/docker/pytest_fixture/wheels/

@@ -1,13 +1,14 @@
 """CP7 E2E Docker: real Docker integration with pytest-enabled fixture image.
 
-Builds a local test-only fixture image (python:3.11 + pytest wheels, no network
-during Docker build). Tests the full path: DurableTestExecution → TestAnt →
-ContainerIsolationBackend → Docker container → structured outcome.
+Builds a local test-only fixture image (python:3.11 + pytest from PyPI).
+Tests the full path: DurableTestExecution → TestAnt → ContainerIsolationBackend
+→ Docker container → structured outcome.
 Skipped when Docker is unavailable or the fixture image fails to build.
 
 CP7 deviation (§O): fixture image is test-only (ant-test-pytest-fixture:local).
-Production TEST_ISOLATION_IMAGE_ID is unchanged. Image is built from local assets
-in tests/docker/pytest_fixture/ (wheels pre-downloaded; no network during build).
+Production TEST_ISOLATION_IMAGE_ID is unchanged. Image is built via
+tests/docker/pytest_fixture/Dockerfile (pip install from PyPI; requires network
+at Docker build time). Wheel archives are not committed to the repository.
 """
 
 from __future__ import annotations
@@ -74,8 +75,8 @@ def _run(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
 def docker_fixture_image():
     """Build the pytest fixture image and return (docker_path, image_id).
 
-    Skips if Docker is unavailable or build fails. The image is built from
-    local wheel assets (tests/docker/pytest_fixture/wheels/) — no network.
+    Skips if Docker is unavailable or build fails (including network failure).
+    The image is built via pip install from PyPI — requires network at build time.
     """
     docker = _docker()
     if docker is None:
