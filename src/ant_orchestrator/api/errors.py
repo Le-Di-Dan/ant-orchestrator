@@ -46,7 +46,10 @@ async def handle_request_validation_error(
 
 
 async def handle_pydantic_validation_error(request: Request, exc: ValidationError) -> JSONResponse:
-    return JSONResponse(status_code=422, content=_error_body("validation_error", str(exc.error_count())))
+    return JSONResponse(
+        status_code=422,
+        content=_error_body("validation_error", str(exc.error_count())),
+    )
 
 
 async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
