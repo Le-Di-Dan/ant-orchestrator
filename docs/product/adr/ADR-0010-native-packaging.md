@@ -1,15 +1,12 @@
 # ADR-0010: Native Packaging Strategy
 
 Ngày: 2026-06-29
-Trạng thái: PROPOSED
+Trạng thái: ACCEPTED (conditional — xem Remaining Conditions section)
 
-> **Lưu ý**: ADR này ở trạng thái PROPOSED. Hypothesis PyInstaller chưa được chứng minh.
-> Trạng thái sẽ được cập nhật sau khi CP2 native spike hoàn tất.
->
-> - CP2 PASS → có thể chuyển ACCEPTED (kèm evidence)
-> - CP2 CONDITIONAL PASS → ACCEPTED với conditions ghi rõ
-> - CP2 FAIL → REJECTED hoặc SUPERSEDED bởi alternative ADR
-> - CP2 BLOCKED → giữ PROPOSED, ghi blocker conditions
+> **CP2 Spike Result**: `PYINSTALLER NATIVE SPIKE: CONDITIONAL PASS` (2026-06-29)
+> Spike report: `docs/plans/PHASE_8_SPIKE_NATIVE.md`
+> Probe source: `scripts/spikes/native_probe.py`
+> All 20 mandatory feasibility checks PASS. Pending: Defender re-test with real-time enabled.
 
 ---
 
@@ -104,9 +101,31 @@ Alternatives khác trong ecosystem.
 
 ---
 
-## Evidence section (điền sau CP2)
+## Evidence section (CP2 spike — 2026-06-29)
 
-> Chưa có evidence — spike chưa thực hiện.
+### Build
+- PyInstaller 6.21.0 `onedir`, Windows x64
+- Spec: `scripts/spikes/native_probe.spec`
+- datas: certifi CA bundle, litellm (full package), tiktoken_ext
+
+### Results
+- 20/20 mandatory checks PASS (final build)
+- Bundle size: 138.2 MB, 6,164 files
+- Executable: `native_probe.exe` (25.5 MB launcher)
+- `frozen=True` confirmed — Python not required in PATH
+- Runs from path with spaces outside source checkout
+- Exit code propagation: 0=success, 1=failure verified
+
+### Issues found and resolved
+1. LiteLLM missing `model_prices_and_context_window_backup.json` → add `datas: litellm`
+2. tiktoken `cl100k_base` missing → add `datas: tiktoken_ext` + hiddenimports
+
+### Remaining conditions
+- **HIGH**: Defender real-time was disabled on test machine — must re-test with Defender enabled before CP8
+- **MEDIUM**: Cold startup ~2.5s — profile and optimize before release
+- **LOW**: Bundle 138 MB — acceptable; formal license audit before public release
+
+Full details: `docs/plans/PHASE_8_SPIKE_NATIVE.md`
 
 ---
 
