@@ -16,6 +16,7 @@ import pytest
 from typer.testing import CliRunner
 
 from ant_orchestrator.cli.main import app
+from ant_orchestrator.cli.workflow_composition import build_workflow_services
 from ant_orchestrator.core.domain.enums import ApprovalStatus, ResumeOperationStatus
 from ant_orchestrator.core.domain.value_objects import (
     ApprovalId,
@@ -41,8 +42,24 @@ cli = CliRunner()
 
 @pytest.fixture
 def nest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Initialize a Nest in ``tmp_path`` and chdir into it; return the root."""
+    """Initialize a Nest in ``tmp_path``, chdir into it; return the root.
+
+    Monkeypatches ``_run_services`` (used only by ``ant run``) with a test
+    composition using ``CountingWorker`` — a test double, NOT DeterministicStubAdapter.
+    All other commands (create/approve/reject/cancel/status) use the neutral
+    composition unchanged so that approve/reject/cancel resume paths remain
+    compatible with the stub-seeded state from ``seed_awaiting``.
+    """
     monkeypatch.chdir(tmp_path)
+    def _test_run_services(path: Path | None) -> object:
+        return build_workflow_services(
+            path if path is not None else Path.cwd(), worker=CountingWorker()
+        )
+
+    monkeypatch.setattr(
+        "ant_orchestrator.cli.phase4_commands._run_services",
+        _test_run_services,
+    )
     result = cli.invoke(app, ["init"])
     assert result.exit_code == 0, result.stdout
     return tmp_path

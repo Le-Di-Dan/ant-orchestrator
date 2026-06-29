@@ -15,6 +15,7 @@ from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
     WorkflowDocumentationPreparer,
 )
+from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.composition import SystemClock
 from ant_orchestrator.composition import (  # noqa: F401
     WorkflowServices as WorkflowServices,
@@ -27,6 +28,7 @@ from ant_orchestrator.workspace.layout import ANT_DIRNAME
 def build_workflow_services(
     start: Path,
     *,
+    worker: WorkerExecutionPort | None = None,
     documentation_execution: DocumentationExecutionPort | None = None,
     documentation_preparer: WorkflowDocumentationPreparer | None = None,
 ) -> WorkflowServices:
@@ -40,6 +42,7 @@ def build_workflow_services(
     reader = JsonlAuditLogReader(logs_dir)
     return _build(
         start,
+        worker=worker,
         documentation_execution=documentation_execution,
         documentation_preparer=documentation_preparer,
         audit_sink=sink,

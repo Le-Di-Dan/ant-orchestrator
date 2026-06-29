@@ -23,6 +23,7 @@ from ant_orchestrator.application.ports.documentation_execution import (
     DocumentationExecutionPort,
     WorkflowDocumentationPreparer,
 )
+from ant_orchestrator.application.ports.worker import WorkerExecutionPort
 from ant_orchestrator.application.ports.workspace import NestNotFound
 from ant_orchestrator.application.services.cancel_task import CancelTask
 from ant_orchestrator.application.services.completion_finalizer import CompletionFinalizer
@@ -134,6 +135,7 @@ def make_memory_retriever(
 def build_workflow_services(
     start: Path,
     *,
+    worker: WorkerExecutionPort | None = None,
     documentation_execution: DocumentationExecutionPort | None = None,
     documentation_preparer: WorkflowDocumentationPreparer | None = None,
     audit_sink: AuditSink | None = None,
@@ -171,7 +173,7 @@ def build_workflow_services(
     get_task_logs = GetTaskLogs(effective_reader)
 
     runner = WorkflowRunner(
-        worker=DeterministicStubAdapter(),
+        worker=worker if worker is not None else DeterministicStubAdapter(),
         policy=DecisionGatePolicy(EnforcementPolicy()),
         checkpoint_db_path=checkpoint_path,
         attempt_orchestrator=AttemptOrchestrator(

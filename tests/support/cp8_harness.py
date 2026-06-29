@@ -51,6 +51,7 @@ def _run(argv: list[str], *, timeout: float) -> Proc:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO_ROOT) + (os.pathsep + existing if existing else "")
+    env["ANT_SELFTEST"] = "1"  # explicit stub mode — never silent, required for subprocess tests
     try:
         completed = subprocess.run(
             argv,

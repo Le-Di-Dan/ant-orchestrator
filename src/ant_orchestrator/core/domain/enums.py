@@ -246,6 +246,17 @@ class ActorSource(_StrEnum):
     LOCAL_CLI = "local_cli"
 
 
+class WorkerKind(_StrEnum):
+    """Worker type for task routing (Phase 8 CP3).
+
+    Values match the constants in :mod:`ant_orchestrator.config.constants`
+    (``DOC_WORKER_KIND``, ``TEST_WORKER_KIND``).
+    """
+
+    DOCUMENTATION = "documentation"
+    TEST = "test"
+
+
 _TERMINAL_TASK_STATUSES = frozenset(
     {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.REJECTED}
 )
