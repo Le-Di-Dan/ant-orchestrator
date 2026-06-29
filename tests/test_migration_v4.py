@@ -15,6 +15,7 @@ from ant_orchestrator.application.ports.database import (
 from ant_orchestrator.core.domain.value_objects import UtcTimestamp
 from ant_orchestrator.persistence.database import Database
 from ant_orchestrator.persistence.migration_v4 import SqliteDatabaseMigratorV4
+from ant_orchestrator.persistence.migration_v5 import SqliteDatabaseMigratorV5
 from ant_orchestrator.persistence.migrations import (
     SqliteDatabaseBootstrapper,
     SqliteDatabaseInspector,
@@ -34,7 +35,7 @@ _TS_OBJ = UtcTimestamp(datetime(2026, 6, 20, tzinfo=UTC))
 def test_fresh_bootstrap_creates_v4(tmp_path: Path, clock: FakeClock) -> None:
     db_path = tmp_path / "state.sqlite"
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
 
 
 def test_fresh_bootstrap_state_is_ready(tmp_path: Path, clock: FakeClock) -> None:
@@ -76,7 +77,7 @@ def test_fresh_bootstrap_json1_succeeds(tmp_path: Path, clock: FakeClock) -> Non
     db_path = tmp_path / "state.sqlite"
     # If JSON1 were unavailable, bootstrap would raise; reaching here means it passed.
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +157,7 @@ def test_v3_to_v4_reopen_succeeds(tmp_path: Path, clock: FakeClock) -> None:
     db_path = tmp_path / "state.sqlite"
     _seed_v3_with_task_and_memory(db_path)
     SqliteDatabaseMigratorV4(clock).migrate(db_path)
+    SqliteDatabaseMigratorV5(clock).migrate(db_path)
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.READY
 
 
@@ -168,7 +170,7 @@ def test_chain_v1_to_v4(tmp_path: Path, clock: FakeClock) -> None:
     db_path = tmp_path / "state.sqlite"
     build_v1_database(db_path)
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.READY
 
 
@@ -182,7 +184,7 @@ def test_chain_v2_to_v4(tmp_path: Path, clock: FakeClock) -> None:
 
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
 
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.READY
 
 
@@ -193,7 +195,7 @@ def test_chain_v3_to_v4(tmp_path: Path, clock: FakeClock) -> None:
 
     SqliteDatabaseBootstrapper(clock).bootstrap(db_path)
 
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
     assert SqliteDatabaseInspector().classify(db_path) is DatabaseState.READY
 
 
@@ -284,7 +286,7 @@ def test_bootstrap_v4_is_idempotent(tmp_path: Path, clock: FakeClock) -> None:
     boot = SqliteDatabaseBootstrapper(clock)
     boot.bootstrap(db_path)
     boot.bootstrap(db_path)  # second call: must be a no-op
-    assert SqliteDatabaseInspector().schema_version(db_path) == 4
+    assert SqliteDatabaseInspector().schema_version(db_path) == 5
 
 
 def test_v4_migrator_idempotent_on_v4(tmp_path: Path, clock: FakeClock) -> None:
