@@ -202,3 +202,16 @@ MAX_ARTIFACT_METADATA_BYTES: Final = 4096
 MAX_ARTIFACT_PATH_CHARS: Final = 512
 MAX_ARTIFACT_MEDIA_TYPE_CHARS: Final = 128
 ARTIFACT_SHA256_HEX_LENGTH: Final = 64
+
+# --- Phase 8 CP5: CLI productization -----------------------------------------
+# Single source of truth for the CLI version.  Used by --version, doctor JSON,
+# and any future packaging layer (wheel metadata, native binary, npm root pkg).
+ANT_CLI_VERSION: Final = "0.1.0"
+# Schema version for the doctor JSON payload (bumped on any field/semantics change).
+DOCTOR_JSON_SCHEMA_VERSION: Final = 1
+# Expected SQLite schema version after all migrations have run (v5 = CP4).
+EXPECTED_DB_SCHEMA_VERSION: Final = 5
+# Supported providers for the configure command.
+CONFIGURE_SUPPORTED_PROVIDERS: Final = frozenset({"openai", "ollama"})
+# Provider → env-var that holds the API key (ollama has no key requirement).
+PROVIDER_KEY_ENV: Final[dict[str, str]] = {"openai": "OPENAI_API_KEY"}

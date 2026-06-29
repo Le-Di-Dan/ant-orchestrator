@@ -30,6 +30,7 @@ from ant_orchestrator.application.services.completion_finalizer import Completio
 from ant_orchestrator.application.services.create_task import CreateTask
 from ant_orchestrator.application.services.get_task_detail import GetTaskDetail
 from ant_orchestrator.application.services.get_task_logs import GetTaskLogs
+from ant_orchestrator.application.services.get_task_result import GetTaskResult
 from ant_orchestrator.application.services.get_worker_run_detail import GetWorkerRunDetail
 from ant_orchestrator.application.services.get_workflow_run_detail import GetWorkflowRunDetail
 from ant_orchestrator.application.services.pause_finalizer import PauseFinalizer
@@ -50,6 +51,7 @@ from ant_orchestrator.persistence.repositories.energy_usage import SqliteEnergyU
 from ant_orchestrator.persistence.repositories.evidence import SqliteExecutionEvidenceRepository
 from ant_orchestrator.persistence.repositories.memory import SqliteMemoryRepository
 from ant_orchestrator.persistence.repositories.task import SqliteTaskRepository
+from ant_orchestrator.persistence.repositories.task_result import SqliteTaskResultRepository
 from ant_orchestrator.persistence.repositories.worker_run import SqliteWorkerRunRepository
 from ant_orchestrator.persistence.repositories.workflow_run import SqliteWorkflowRunReadRepository
 from ant_orchestrator.persistence.unit_of_work import SqliteUnitOfWork
@@ -108,6 +110,7 @@ class WorkflowServices:
     search_memory: SearchMemory
     get_task_logs: GetTaskLogs
     get_task_detail: GetTaskDetail
+    get_task_result: GetTaskResult
     get_worker_run_detail: GetWorkerRunDetail
     get_workflow_run_detail: GetWorkflowRunDetail
 
@@ -223,6 +226,10 @@ def build_workflow_services(
         search_memory=search_memory,
         get_task_logs=get_task_logs,
         get_task_detail=get_task_detail,
+        get_task_result=GetTaskResult(
+            task_repo=SqliteTaskRepository(database),
+            result_repo=SqliteTaskResultRepository(database),
+        ),
         get_worker_run_detail=get_worker_run_detail,
         get_workflow_run_detail=get_workflow_run_detail,
     )

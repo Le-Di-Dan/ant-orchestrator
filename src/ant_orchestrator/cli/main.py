@@ -12,10 +12,20 @@ from typing import NoReturn
 import typer
 
 from ant_orchestrator.application.models.outcomes import InitNestOutcome
-from ant_orchestrator.cli import json_contract, phase4_commands, phase7_logs, phase7_memory, render
+from ant_orchestrator.cli import (
+    cp5_configure,
+    cp5_doctor,
+    json_contract,
+    phase4_commands,
+    phase7_logs,
+    phase7_memory,
+    render,
+)
+from ant_orchestrator.cli import cp5_task_detail as _task_detail_module
 from ant_orchestrator.cli.composition import build_services
 from ant_orchestrator.cli.exit_codes import exit_code_for
 from ant_orchestrator.cli.workflow_composition import build_workflow_services
+from ant_orchestrator.config.constants import ANT_CLI_VERSION
 from ant_orchestrator.errors import AntError
 
 app = typer.Typer(help="Ant-Orchestrator CLI")
@@ -37,8 +47,22 @@ _INIT_MESSAGES = {
 _PATH_OPTION = typer.Option(None, help="Project root to initialise (default: cwd).")
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(ANT_CLI_VERSION)
+        raise typer.Exit()
+
+
 @app.callback()
-def root() -> None:
+def root(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the CLI version and exit.",
+    ),
+) -> None:
     """Ant-Orchestrator CLI."""
 
 
@@ -107,8 +131,26 @@ def config_show() -> None:
 phase4_commands.register(app)
 phase7_logs.register(app)
 phase7_memory.register(app)
+cp5_doctor.register(app)
+cp5_configure.register(app)
+
+# Extend the existing ``task`` sub-typer (registered by phase4_commands) with
+# the CP5 ``task show`` and ``task result`` commands.
+_task_app = typer.Typer(help="Create and inspect tasks.")
+_task_detail_module.register(_task_app)
+
+
+def _register_cp5_task(root_app: typer.Typer) -> None:
+    """Attach show/result to the task sub-typer already registered by phase4."""
+    for group in root_app.registered_groups:
+        if group.name == "task" and group.typer_instance is not None:
+            _task_detail_module.register(group.typer_instance)
+            return
+
+
+_register_cp5_task(app)
 
 
 def main() -> None:
-    """Console-script entry point invoked by the ``ant`` command."""
+    """Console-script entry point invoked by the ``ant`` and ``antctl`` commands."""
     app()
