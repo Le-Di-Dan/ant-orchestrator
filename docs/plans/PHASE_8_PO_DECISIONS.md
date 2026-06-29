@@ -1,17 +1,14 @@
 # Phase 8 — Product Owner Decision Register
 
-> **Trạng thái**: Tất cả quyết định dưới đây ở trạng thái `PENDING` trừ khi Product Owner ký.
+> **Cập nhật**: 2026-06-29 — Toàn bộ 10 quyết định đã được Product Owner chốt.
 > **Tạo**: CP0, Phase 8 startup.
-> **Provisional values**: chỉ dùng nội bộ cho design và spike, không được publish.
 
 ---
 
 ## Quy tắc
 
+- `APPROVED` = Product Owner đã xác nhận chính thức.
 - `PENDING` = chưa có Product Owner sign-off.
-- `APPROVED` = Product Owner đã xác nhận bằng văn bản.
-- `REJECTED` = Product Owner đã từ chối.
-- Provisional value KHÔNG phải approved value.
 - Không tự promote từ PENDING → APPROVED.
 
 ---
@@ -20,10 +17,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | `<cli-command>` |
-| Dùng trong | npm `bin`, `pyproject.toml` scripts, CLI docs, all test specs |
-| Notes | Toàn bộ plan và test spec dùng `<cli-command>` placeholder. Sau khi approved thay toàn bộ. |
+| Status | APPROVED |
+| Value | `antctl` |
+| Notes | Legacy Python entry-point `ant` có thể giữ trong thời gian migration. Không xóa âm thầm nếu test/developer workflow đang phụ thuộc. Migration plan phải rõ ràng. |
 
 ---
 
@@ -31,9 +27,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | TBD |
-| Notes | Không tự xác nhận scope availability. Cần Product Owner chỉ định npm org hoặc unscoped. |
+| Status | APPROVED |
+| Value | `@ant-orchestrator` |
+| Notes | Root npm package: `@ant-orchestrator/cli` |
 
 ---
 
@@ -41,9 +37,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | `private` (local Verdaccio only) |
-| Notes | Không publish public trước khi approved. |
+| Status | APPROVED |
+| Value | Local/private Verdaccio only trong Phase 8 |
+| Notes | Public npm release cần approval riêng sau Phase 8 closure (xem PO-10). |
 
 ---
 
@@ -51,9 +47,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | `UNLICENSED` |
-| Notes | Không tự chọn license. `UNLICENSED` ngăn publish công khai. |
+| Status | APPROVED |
+| Value | `UNLICENSED` |
+| Notes | Ngăn publish công khai. Sẽ được thay đổi khi có approval release. |
 
 ---
 
@@ -61,9 +57,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | `0.1.0-dev` |
-| Notes | Không dùng `0.1.0-dev` cho public release. |
+| Status | APPROVED |
+| Value | `0.1.0` |
+| Notes | Productized MVP version. Không publish public trong Phase 8. |
 
 ---
 
@@ -71,9 +67,8 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | TBD |
-| Notes | Không tự điền `author`, `organization`, email vào `package.json`. |
+| Status | APPROVED |
+| Value | `Ant-Orchestrator Project` |
 
 ---
 
@@ -81,9 +76,8 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | TBD |
-| Notes | Không tự điền repository URL. |
+| Status | APPROVED |
+| Value | Dùng repository metadata chính thức hiện tại; không tạo homepage giả |
 
 ---
 
@@ -91,9 +85,9 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | Windows x64 |
-| Notes | Spike CP2 chỉ chạy trên Windows x64. Nếu Phase 8 cần macOS/Linux thì spike phải chạy lại. |
+| Status | APPROVED |
+| Value | Windows x64 only |
+| Notes | CP2 spike chạy trên Windows x64. Các platform khác cần spike riêng. |
 
 ---
 
@@ -101,9 +95,8 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | Build artifact only (không publish PyPI) |
-| Notes | Wheel chỉ dùng để tạo native executable. |
+| Status | APPROVED |
+| Value | Python wheel là internal build artifact; không publish PyPI |
 
 ---
 
@@ -111,9 +104,19 @@
 
 | Field | Value |
 |---|---|
-| Status | PENDING |
-| Provisional | Chuẩn bị (không release công khai trong Phase 8) |
-| Notes | Phase 8 kết thúc ở CP9 integration test. CP10 là live smoke test nội bộ. |
+| Status | APPROVED |
+| Value | Public npm release cần approval riêng sau Phase 8 closure |
+| Notes | Phase 8 kết thúc ở Verdaccio local integration test. |
+
+---
+
+## Additional decisions
+
+### Executable alias
+
+- Không expose npm binary alias `ant` trong release đầu.
+- Legacy Python entry-point có thể vẫn là `ant` trong thời gian migration.
+- Phase 8 phải có migration plan rõ ràng (documented tại CP5).
 
 ---
 
@@ -122,3 +125,4 @@
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-29 | Tạo decision register, toàn bộ PENDING | CP0 Phase 8 startup |
+| 2026-06-29 | Cập nhật tất cả APPROVED theo Product Owner sign-off | docs(decision) commit |
