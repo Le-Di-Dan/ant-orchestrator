@@ -8,9 +8,14 @@ timeout, and surfaces both streams when a step fails. Two entry points are expos
 * :func:`run_driver` — the test-only ``tests.support.cp8_driver`` module
   (application-service evidence for branches the vanilla CLI cannot reach).
 
-Windows-safe: resolves the interpreter's console-scripts dir (no PATH assumption),
+Windows-safe: invokes the CLI as ``python -m`` (no PATH/console-script assumption),
 passes explicit ``--path``/``--workspace`` (no cwd-relative discovery), and uses
 only ``pathlib`` paths.
+
+CP6: the ``run`` command no longer honours any production environment switch to use
+the deterministic stub. These subprocess steps therefore go through the test-only
+``tests.support.cp8_cli`` entry, which applies a single dependency-injection seam to
+wire the neutral stub composition for ``run`` — never via ``ANT_SELFTEST``.
 """
 
 from __future__ import annotations
@@ -19,12 +24,12 @@ import json
 import os
 import subprocess
 import sys
-import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TIMEOUT = 60.0
+_CLI_MODULE = "tests.support.cp8_cli"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,18 +45,10 @@ class Proc:
         return json.loads(self.stdout)
 
 
-def ant_exe() -> Path:
-    """Resolve the installed ``ant`` console script for the running interpreter."""
-    scripts_dir = Path(sysconfig.get_path("scripts"))
-    name = "ant.exe" if os.name == "nt" else "ant"
-    return scripts_dir / name
-
-
 def _run(argv: list[str], *, timeout: float) -> Proc:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO_ROOT) + (os.pathsep + existing if existing else "")
-    env["ANT_SELFTEST"] = "1"  # explicit stub mode — never silent, required for subprocess tests
     try:
         completed = subprocess.run(
             argv,
@@ -72,10 +69,8 @@ def _run(argv: list[str], *, timeout: float) -> Proc:
 
 
 def run_cli(args: list[str], *, timeout: float = DEFAULT_TIMEOUT) -> Proc:
-    """Run the production ``ant`` console script with ``args``."""
-    exe = ant_exe()
-    assert exe.exists(), f"ant console script missing at {exe}; run 'pip install -e .[dev]'"
-    return _run([str(exe), *args], timeout=timeout)
+    """Run the CLI (test-only stub-wired entry) with ``args`` as a real process."""
+    return _run([sys.executable, "-m", _CLI_MODULE, *args], timeout=timeout)
 
 
 def run_driver(args: list[str], *, timeout: float = DEFAULT_TIMEOUT) -> Proc:

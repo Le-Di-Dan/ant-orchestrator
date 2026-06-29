@@ -15,6 +15,7 @@ from ant_orchestrator.application.models.outcomes import InitNestOutcome
 from ant_orchestrator.cli import (
     cp5_configure,
     cp5_doctor,
+    cp6_self_test,
     json_contract,
     phase4_commands,
     phase7_logs,
@@ -133,6 +134,7 @@ phase7_logs.register(app)
 phase7_memory.register(app)
 cp5_doctor.register(app)
 cp5_configure.register(app)
+cp6_self_test.register(app)
 
 # Extend the existing ``task`` sub-typer (registered by phase4_commands) with
 # the CP5 ``task show`` and ``task result`` commands.

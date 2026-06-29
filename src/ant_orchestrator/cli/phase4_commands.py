@@ -9,7 +9,6 @@ call services. ``--json`` is opt-in and, when set, stdout carries a single JSON 
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import NoReturn
 
@@ -24,9 +23,6 @@ from ant_orchestrator.config.constants import MAX_REJECT_REASON_CHARS
 from ant_orchestrator.core.domain.enums import ActorSource, TaskPriority
 from ant_orchestrator.core.domain.errors import InvariantViolation
 from ant_orchestrator.errors import AntError
-
-# When set to "1", uses neutral stub composition instead of production (explicit self-test path).
-_ANT_SELFTEST_ENV = "ANT_SELFTEST"
 
 # Module-level option/argument singletons (avoid a function call in a default; B008).
 _TASK_ID_ARG = typer.Argument(..., help="Task id.")
@@ -46,12 +42,11 @@ def _services(path: Path | None) -> WorkflowServices:
 def _run_services(path: Path | None) -> WorkflowServices:
     """Production composition for ``ant run`` — requires queen + local provider config.
 
-    When ANT_SELFTEST=1 is set, falls back to neutral stub composition (explicit
-    deterministic verification path, never silent).
+    Always production: there is NO environment switch or user-selectable config that
+    can substitute the deterministic stub here. Deterministic verification lives in the
+    isolated ``antctl self-test`` command, never in this production path.
     """
     resolved = path if path is not None else Path.cwd()
-    if os.environ.get(_ANT_SELFTEST_ENV) == "1":
-        return build_workflow_services(resolved)
     return build_production_workflow_services(resolved)
 
 

@@ -145,11 +145,16 @@ def build_workflow_services(
     audit_log_reader: AuditLogReader | None = None,
     clock: Clock | None = None,
     ids: IdGenerator | None = None,
+    task_result_finalizer: object | None = None,
 ) -> WorkflowServices:
     """Discover the Nest from ``start`` and assemble all workflow services.
 
     Raises :class:`NestNotFound` (→ exit 3) when no ``.ant/`` exists at or above
     ``start``; storage/schema problems surface later as ``DatabasePortError`` (→ 4).
+
+    ``task_result_finalizer`` is opt-in (default ``None``): production ``run`` does
+    not wire it, so behaviour is unchanged. The self-test composition injects a real
+    finalizer so the deterministic scenario can verify TaskResult persistence.
     """
     root = find_nest(start)
     if root is None:
@@ -186,7 +191,12 @@ def build_workflow_services(
         documentation_execution=documentation_execution,
     )
     pause = PauseFinalizer(uow_factory, clock=effective_clock, ids=effective_ids)
-    complete = CompletionFinalizer(uow_factory, clock=effective_clock, ids=effective_ids)
+    complete = CompletionFinalizer(
+        uow_factory,
+        clock=effective_clock,
+        ids=effective_ids,
+        task_result_finalizer=task_result_finalizer,
+    )
 
     wf_read_repo = SqliteWorkflowRunReadRepository(database)
     get_task_detail = GetTaskDetail(
