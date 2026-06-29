@@ -44,13 +44,15 @@ cli = CliRunner()
 def nest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Initialize a Nest in ``tmp_path``, chdir into it; return the root.
 
-    Monkeypatches ``_run_services`` (used only by ``ant run``) with a test
-    composition using ``CountingWorker`` — a test double, NOT DeterministicStubAdapter.
-    All other commands (create/approve/reject/cancel/status) use the neutral
-    composition unchanged so that approve/reject/cancel resume paths remain
-    compatible with the stub-seeded state from ``seed_awaiting``.
+    Monkeypatches ``_run_services`` (used by ``ant run`` and ``ant approve`` — both
+    can auto-resume and execute a worker) with a test composition using
+    ``CountingWorker`` — a test double, NOT DeterministicStubAdapter. The remaining
+    commands (create/reject/cancel/status) use the neutral composition unchanged;
+    reject's resume routes to a terminal node and never executes a worker, so it
+    stays compatible with the stub-seeded state from ``seed_awaiting``.
     """
     monkeypatch.chdir(tmp_path)
+
     def _test_run_services(path: Path | None) -> object:
         return build_workflow_services(
             path if path is not None else Path.cwd(), worker=CountingWorker()

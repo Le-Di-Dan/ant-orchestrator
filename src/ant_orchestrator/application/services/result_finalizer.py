@@ -19,6 +19,7 @@ from ant_orchestrator.config.constants import (
     TASK_RESULT_VERSION,
 )
 from ant_orchestrator.core.domain.task_result import (
+    ArtifactRef,
     FailureInfo,
     TaskResult,
     TaskResultOutcome,
@@ -26,7 +27,7 @@ from ant_orchestrator.core.domain.task_result import (
 )
 from ant_orchestrator.core.ports.clock import Clock
 
-__all__ = ["TaskResultFinalizer", "TaskResultWriteRepository"]
+__all__ = ["ResultArtifactProvider", "TaskResultFinalizer", "TaskResultWriteRepository"]
 
 _SUMMARY_FALLBACK: Final = "Workflow completed; no summary available."
 
@@ -47,6 +48,20 @@ class TaskResultWriteRepository(Protocol):
     def save(self, result: TaskResult, *, artifact_created_at: str) -> None: ...
 
 
+@runtime_checkable
+class ResultArtifactProvider(Protocol):
+    """Optional hook that materializes artifacts to persist with a TaskResult.
+
+    Production ``run`` leaves this unset, so the finalizer persists no artifacts and
+    behaviour is unchanged. The deterministic self-test injects a provider that writes
+    a fixed internal artifact, exercising the full persistence/retrieval pipeline.
+    """
+
+    def provide(
+        self, *, run_id: str, task_id: str, state: Mapping[str, object]
+    ) -> tuple[ArtifactRef, ...]: ...
+
+
 class TaskResultFinalizer:
     """Assemble and persist a TaskResult for each terminal workflow outcome.
 
@@ -59,9 +74,11 @@ class TaskResultFinalizer:
         result_repository: TaskResultWriteRepository,
         *,
         clock: Clock,
+        artifact_provider: ResultArtifactProvider | None = None,
     ) -> None:
         self._repo = result_repository
         self._clock = clock
+        self._artifact_provider = artifact_provider
 
     def finalize(
         self,
@@ -90,6 +107,11 @@ class TaskResultFinalizer:
             if outcome is not TaskResultOutcome.COMPLETED
             else None
         )
+        artifacts = (
+            self._artifact_provider.provide(run_id=run_id, task_id=task_id, state=state)
+            if self._artifact_provider is not None
+            else ()
+        )
 
         result = TaskResult(
             result_id=result_id,
@@ -97,7 +119,7 @@ class TaskResultFinalizer:
             workflow_run_id=run_id,
             outcome=outcome,
             summary=summary,
-            artifact_refs=(),
+            artifact_refs=artifacts,
             failure=failure,
             finalized_at=now,
             result_version=TASK_RESULT_VERSION,

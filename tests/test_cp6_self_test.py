@@ -35,6 +35,7 @@ _REQUIRED_CHECK_IDS = {
     "workflow.no_duplicate_run",
     "result.finalized",
     "result.retrieve",
+    "result.artifact_digest",
     "security.no_network",
     "security.workspace_boundary",
     "security.stub_isolated",
@@ -84,9 +85,40 @@ def test_workflow_scenario_is_deterministic_completed() -> None:
     assert by_id["result.no_duplicate"].status == "PASS"
 
 
-def test_artifact_digest_skips_without_artifacts() -> None:
+def test_artifact_digest_verifies_real_pipeline() -> None:
+    """CP7 carry-forward B: the self-test must verify a real artifact, never SKIP."""
     by_id = {c.check_id: c for c in _report().checks}
-    assert by_id["result.artifact_digest"].status == "SKIP"
+    assert by_id["result.artifact_digest"].status == "PASS"
+
+
+def test_self_test_artifact_persisted_and_idempotent(tmp_path: Path) -> None:
+    """The deterministic internal artifact is written, persisted with a valid digest,
+    retrievable, and a terminal re-run never duplicates it."""
+    import hashlib
+
+    from ant_orchestrator.cli.composition import build_services
+    from ant_orchestrator.cli.self_test_artifact import (
+        SELF_TEST_ARTIFACT_CONTENT,
+        SELF_TEST_ARTIFACT_RELATIVE_PATH,
+    )
+    from ant_orchestrator.cli.self_test_scenario import workflow_and_result_checks
+
+    build_services().init_nest.init(tmp_path)
+    composition = build_self_test_services(tmp_path)
+    workflow_and_result_checks(composition)
+
+    on_disk = (composition.artifacts_root / SELF_TEST_ARTIFACT_RELATIVE_PATH).read_bytes()
+    expected = SELF_TEST_ARTIFACT_CONTENT.encode("utf-8")
+    assert on_disk == expected
+
+    # A second scenario pass (terminal re-run rejected) must not duplicate the result/ref.
+    with composition.database.connect() as conn:
+        results = conn.execute("SELECT COUNT(*) FROM task_results").fetchone()[0]
+        artifacts = conn.execute("SELECT sha256, size_bytes FROM task_result_artifacts").fetchall()
+    assert results == 1
+    assert len(artifacts) == 1
+    assert artifacts[0][0] == hashlib.sha256(expected).hexdigest()
+    assert artifacts[0][1] == len(expected)
 
 
 # --- composition isolation ----------------------------------------------------

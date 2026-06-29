@@ -117,10 +117,17 @@ def approve(
     json_output: bool = _JSON_OPTION,
     path: Path | None = _PATH_OPTION,
 ) -> None:
-    """Approve the pending gate for a task (actor source: local CLI)."""
+    """Approve the pending gate for a task (actor source: local CLI).
+
+    Uses the *production* composition: approving auto-resumes the workflow and the
+    approved continuation executes a real worker. Routing this through the neutral
+    composition would silently run that work on ``DeterministicStubAdapter`` and
+    fabricate a completed result, so approve must fail-closed on missing provider
+    config exactly like ``run``.
+    """
     command = "approve"
     try:
-        services = _services(path)
+        services = _run_services(path)
         outcome = services.resolve_approval.approve(
             task_id, actor_source=ActorSource.LOCAL_CLI, actor_label=by
         )
@@ -140,7 +147,13 @@ def reject(
     json_output: bool = _JSON_OPTION,
     path: Path | None = _PATH_OPTION,
 ) -> None:
-    """Reject the pending gate for a task with a required, sanitized reason."""
+    """Reject the pending gate for a task with a required, sanitized reason.
+
+    Uses the *neutral* composition on purpose: a rejected resume routes the graph
+    straight to its terminal rejected node and never invokes a worker, so reject must
+    keep working without provider config. The default stub worker is therefore wired
+    but never executed (asserted by ``test_reject_pending_rejects_without_worker``).
+    """
     command = "reject"
     try:
         services = _services(path)

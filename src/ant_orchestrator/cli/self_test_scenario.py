@@ -8,13 +8,21 @@ verification scenario — never presented as an AI-generated production task.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from ant_orchestrator.application.errors import WorkflowStateError
+from ant_orchestrator.application.models.result_views import TaskResultView
 from ant_orchestrator.cli.composition_self_test import SelfTestComposition
 from ant_orchestrator.cli.cp5_doctor_checks import (
     STATUS_FAIL,
     STATUS_PASS,
     STATUS_SKIP,
     CheckResult,
+)
+from ant_orchestrator.cli.self_test_artifact import (
+    SELF_TEST_ARTIFACT_CONTENT,
+    SELF_TEST_ARTIFACT_RELATIVE_PATH,
 )
 from ant_orchestrator.config.constants import TASK_RESULT_VERSION
 from ant_orchestrator.core.domain.enums import TaskPriority
@@ -106,7 +114,7 @@ def _result_checks(
             f"retrieved result v{view.result_version}",
         ),
     ]
-    results.append(_artifact_digest_check(view))
+    results.append(_artifact_digest_check(view, composition.artifacts_root))
     count = _count(composition, "task_results", task_id)
     results.append(
         CheckResult(
@@ -118,23 +126,44 @@ def _result_checks(
     return results
 
 
-def _artifact_digest_check(view: object) -> CheckResult:
-    """Verify each artifact ref has a valid digest/size, or SKIP when none exist."""
-    refs = getattr(view, "artifact_refs", ())
-    if not refs:
+def _artifact_digest_check(view: TaskResultView, artifacts_root: Path) -> CheckResult:
+    """Verify the persisted self-test artifact end-to-end (digest, path safety, content).
+
+    The self-test composition writes exactly one deterministic internal artifact, so a
+    missing or mismatching ref is a real failure — never a SKIP.
+    """
+    refs = view.artifact_refs
+    if len(refs) != 1:
         return CheckResult(
-            "result.artifact_digest",
-            STATUS_SKIP,
-            "deterministic stub produces no artifacts",
+            "result.artifact_digest", STATUS_FAIL, f"expected 1 artifact ref, found {len(refs)}"
         )
-    for ref in refs:
-        sha = getattr(ref, "sha256", "")
-        size = getattr(ref, "size_bytes", -1)
-        if len(sha) != 64 or size < 0 or ref.relative_path.startswith(("/", "\\")):
-            return CheckResult(
-                "result.artifact_digest", STATUS_FAIL, "invalid artifact digest/path"
-            )
-    return CheckResult("result.artifact_digest", STATUS_PASS, f"{len(refs)} artifact ref(s) valid")
+    ref = refs[0]
+    rel = ref.relative_path
+    if rel != SELF_TEST_ARTIFACT_RELATIVE_PATH or rel.startswith(("/", "\\")) or ".." in rel:
+        return CheckResult("result.artifact_digest", STATUS_FAIL, "unsafe/unexpected artifact path")
+
+    expected = SELF_TEST_ARTIFACT_CONTENT.encode("utf-8")
+    root = artifacts_root.resolve()
+    target = (artifacts_root / rel).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return CheckResult("result.artifact_digest", STATUS_FAIL, "artifact escaped artifacts root")
+    if not target.is_file():
+        return CheckResult("result.artifact_digest", STATUS_FAIL, "artifact file missing on disk")
+
+    on_disk = target.read_bytes()
+    sha = hashlib.sha256(on_disk).hexdigest()
+    if (
+        on_disk != expected
+        or ref.size_bytes != len(expected)
+        or ref.sha256 != sha
+        or len(ref.sha256) != 64
+    ):
+        return CheckResult("result.artifact_digest", STATUS_FAIL, "artifact digest/size mismatch")
+    return CheckResult(
+        "result.artifact_digest", STATUS_PASS, f"internal artifact verified ({ref.size_bytes} B)"
+    )
 
 
 def stub_isolation_check(composition: SelfTestComposition) -> CheckResult:

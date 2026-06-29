@@ -20,6 +20,7 @@ from pathlib import Path
 from ant_orchestrator.adapters.jsonl_audit_log_reader import JsonlAuditLogReader
 from ant_orchestrator.adapters.jsonl_audit_sink import JsonlAuditSink
 from ant_orchestrator.application.services.result_finalizer import TaskResultFinalizer
+from ant_orchestrator.cli.self_test_artifact import SelfTestArtifactProvider
 from ant_orchestrator.composition import WorkflowServices, build_workflow_services
 from ant_orchestrator.core.domain.value_objects import UtcTimestamp
 from ant_orchestrator.persistence.database import Database
@@ -29,6 +30,7 @@ from ant_orchestrator.workers.stub import DeterministicStubAdapter
 from ant_orchestrator.workspace.discovery import find_nest
 from ant_orchestrator.workspace.layout import (
     ANT_DIRNAME,
+    ARTIFACTS_DIRNAME,
     CHECKPOINT_DB_FILENAME,
     DATABASE_FILENAME,
 )
@@ -71,6 +73,7 @@ class SelfTestComposition:
     database: Database
     checkpoint_db_path: Path
     logs_dir: Path
+    artifacts_root: Path
     audit_sink: JsonlAuditSink
     audit_log_reader: JsonlAuditLogReader
     redactor: Redactor
@@ -89,6 +92,7 @@ def build_self_test_services(workspace: Path) -> SelfTestComposition:
         raise FileNotFoundError(f"No .ant/ found from {workspace}")
     ant_dir = root / ANT_DIRNAME
     logs_dir = ant_dir / "logs"
+    artifacts_root = ant_dir / ARTIFACTS_DIRNAME
     checkpoint_db_path = ant_dir / CHECKPOINT_DB_FILENAME
 
     clock = DeterministicClock()
@@ -99,7 +103,11 @@ def build_self_test_services(workspace: Path) -> SelfTestComposition:
     worker = DeterministicStubAdapter()
 
     database = Database(ant_dir / DATABASE_FILENAME)
-    result_finalizer = TaskResultFinalizer(SqliteTaskResultRepository(database), clock=clock)
+    result_finalizer = TaskResultFinalizer(
+        SqliteTaskResultRepository(database),
+        clock=clock,
+        artifact_provider=SelfTestArtifactProvider(artifacts_root),
+    )
 
     services = build_workflow_services(
         workspace,
@@ -115,6 +123,7 @@ def build_self_test_services(workspace: Path) -> SelfTestComposition:
         database=database,
         checkpoint_db_path=checkpoint_db_path,
         logs_dir=logs_dir,
+        artifacts_root=artifacts_root,
         audit_sink=sink,
         audit_log_reader=reader,
         redactor=redactor,
