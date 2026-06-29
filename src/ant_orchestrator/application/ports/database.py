@@ -36,6 +36,10 @@ class RecordNotFound(DatabasePortError):
     """A requested record does not exist."""
 
 
+class ResultConflict(DatabasePortError):
+    """A TaskResult for this WorkflowRun already exists with a different outcome."""
+
+
 # ---------------------------------------------------------------------------
 # State enum + protocols
 # ---------------------------------------------------------------------------

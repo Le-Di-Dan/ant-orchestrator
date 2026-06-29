@@ -1,4 +1,4 @@
-"""SQLite schema (v2 authority) — DDL and expected-structure metadata.
+"""SQLite schema (v5 authority) — DDL and expected-structure metadata.
 
 CHECK constraints are generated from the domain enums so the allowed values have a
 single source of truth. v2 adds the Phase 4 workflow-execution tables and extends
@@ -126,8 +126,38 @@ _MEMORY_DDL = f"""CREATE TABLE memory_records (
     task_id TEXT REFERENCES tasks(id)
 )"""
 
+_TASK_RESULTS_DDL = """\
+CREATE TABLE task_results (
+    id TEXT PRIMARY KEY NOT NULL,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
+    workflow_run_id TEXT NOT NULL UNIQUE REFERENCES workflow_runs(id) ON DELETE RESTRICT,
+    outcome TEXT NOT NULL CHECK (outcome IN ('completed', 'failed', 'rejected', 'cancelled')),
+    summary TEXT NOT NULL,
+    failure_code TEXT,
+    failure_message TEXT,
+    failure_retryable INTEGER CHECK (failure_retryable IN (0, 1)),
+    failure_source TEXT,
+    finalized_at TEXT NOT NULL,
+    result_version INTEGER NOT NULL
+)"""
+
+_TASK_RESULT_ARTIFACTS_DDL = """\
+CREATE TABLE task_result_artifacts (
+    id TEXT PRIMARY KEY NOT NULL,
+    task_result_id TEXT NOT NULL REFERENCES task_results(id) ON DELETE RESTRICT,
+    kind TEXT NOT NULL CHECK (kind IN ('internal', 'staged', 'applied')),
+    relative_path TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    created_by_attempt_id TEXT,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'final', 'rejected')),
+    metadata_json TEXT,
+    created_at TEXT NOT NULL
+)"""
+
 # Ordered so every FK target is created before its referrer (workflow_runs before
-# approvals; approvals before resume_operations).
+# approvals; approvals before resume_operations; task_results before artifacts).
 TABLE_DDL: tuple[str, ...] = (
     _MIGRATIONS_DDL,
     _TASKS_DDL,
@@ -141,6 +171,8 @@ TABLE_DDL: tuple[str, ...] = (
     _PHEROMONES_DDL,
     _MEMORY_DDL,
     *WORKFLOW_AUX_DDL,
+    _TASK_RESULTS_DDL,
+    _TASK_RESULT_ARTIFACTS_DDL,
 )
 
 _V1_INDEX_DDL: tuple[str, ...] = (
@@ -158,7 +190,13 @@ _V1_INDEX_DDL: tuple[str, ...] = (
 
 _V4_INDEX_DDL: tuple[str, ...] = ("CREATE INDEX idx_mem_task ON memory_records(task_id)",)
 
-INDEX_DDL: tuple[str, ...] = (*_V1_INDEX_DDL, *WORKFLOW_INDEX_DDL, *_V4_INDEX_DDL)
+_V5_INDEX_DDL: tuple[str, ...] = (
+    "CREATE INDEX idx_task_results_task ON task_results(task_id)",
+    "CREATE INDEX idx_task_results_run ON task_results(workflow_run_id)",
+    "CREATE INDEX idx_trarr_result ON task_result_artifacts(task_result_id)",
+)
+
+INDEX_DDL: tuple[str, ...] = (*_V1_INDEX_DDL, *WORKFLOW_INDEX_DDL, *_V4_INDEX_DDL, *_V5_INDEX_DDL)
 
 _APPROVALS_EXPECTED = (
     frozenset({"id", "task_id", "checkpoint_id", "status", "reason", "requested_at", "decided_at"})
@@ -216,6 +254,36 @@ EXPECTED_SCHEMA: dict[str, frozenset[str]] = {
             "created_at",
             "deprecated",
             "task_id",
+        }
+    ),
+    "task_results": frozenset(
+        {
+            "id",
+            "task_id",
+            "workflow_run_id",
+            "outcome",
+            "summary",
+            "failure_code",
+            "failure_message",
+            "failure_retryable",
+            "failure_source",
+            "finalized_at",
+            "result_version",
+        }
+    ),
+    "task_result_artifacts": frozenset(
+        {
+            "id",
+            "task_result_id",
+            "kind",
+            "relative_path",
+            "media_type",
+            "sha256",
+            "size_bytes",
+            "created_by_attempt_id",
+            "state",
+            "metadata_json",
+            "created_at",
         }
     ),
     **WORKFLOW_EXPECTED_SCHEMA,

@@ -59,11 +59,13 @@ class CompletionFinalizer:
         clock: Clock,
         ids: IdGenerator,
         terminal_handoff: object | None = None,
+        task_result_finalizer: object | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._clock = clock
         self._ids = ids
         self._terminal_handoff = terminal_handoff
+        self._task_result_finalizer = task_result_finalizer
 
     def finalize(
         self,
@@ -142,6 +144,20 @@ class CompletionFinalizer:
 
             if isinstance(self._terminal_handoff, TerminalHandoffService):
                 self._terminal_handoff.create_terminal_handoff(
+                    run_id=run_id.value,
+                    task_id=task_id_str,
+                    final_outcome=final_outcome,
+                    state=state or {},
+                )
+
+        # Phase 3: task result persistence (fail-closed: error propagates if write fails).
+        if self._task_result_finalizer is not None and task_id_str is not None:
+            from ant_orchestrator.application.services.result_finalizer import (
+                TaskResultFinalizer,
+            )
+
+            if isinstance(self._task_result_finalizer, TaskResultFinalizer):
+                self._task_result_finalizer.finalize(
                     run_id=run_id.value,
                     task_id=task_id_str,
                     final_outcome=final_outcome,

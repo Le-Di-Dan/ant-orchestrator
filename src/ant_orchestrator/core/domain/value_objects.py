@@ -86,6 +86,10 @@ class ExecutionAttemptId(Identifier):
     """Identity of a single ExecutionAttempt of a logical action."""
 
 
+class TaskResultId(Identifier):
+    """Identity of a TaskResult (deterministic from workflow_run_id + outcome)."""
+
+
 @dataclass(frozen=True, slots=True)
 class UtcTimestamp:
     """A timezone-aware timestamp pinned to UTC, serialized as ISO-8601."""
